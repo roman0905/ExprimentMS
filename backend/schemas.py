@@ -8,6 +8,19 @@ class GenderEnum(str, Enum):
     Female = "Female"
     Other = "Other"
 
+class RoleEnum(str, Enum):
+    Admin = "Admin"
+    User = "User"
+
+class ModuleEnum(str, Enum):
+    BATCH_MANAGEMENT = "batch_management"
+    PERSON_MANAGEMENT = "person_management"
+    EXPERIMENT_MANAGEMENT = "experiment_management"
+    COMPETITOR_DATA = "competitor_data"
+    FINGER_BLOOD_DATA = "finger_blood_data"
+    SENSOR_DATA = "sensor_data"
+    USER_MANAGEMENT = "user_management"
+
 # 批次相关模式
 class BatchBase(BaseModel):
     batch_number: str
@@ -47,21 +60,32 @@ class PersonResponse(PersonBase):
         from_attributes = True
 
 # 实验相关模式
+class ExperimentMemberBase(BaseModel):
+    person_id: int
+
+class ExperimentMemberResponse(ExperimentMemberBase):
+    id: int
+    experiment_id: int
+    person_name: Optional[str] = None
+    
+    class Config:
+        from_attributes = True
+
 class ExperimentBase(BaseModel):
     batch_id: int
-    person_id: int
     experiment_content: Optional[str] = None
 
 class ExperimentCreate(ExperimentBase):
-    pass
+    member_ids: List[int] = []  # 实验成员ID列表
 
 class ExperimentUpdate(ExperimentBase):
-    pass
+    member_ids: Optional[List[int]] = None  # 实验成员ID列表
 
 class ExperimentResponse(ExperimentBase):
     experiment_id: int
+    created_time: Optional[datetime] = None
     batch_number: Optional[str] = None
-    person_name: Optional[str] = None
+    members: List[ExperimentMemberResponse] = []
     
     class Config:
         from_attributes = True
@@ -79,6 +103,7 @@ class CompetitorFileResponse(CompetitorFileBase):
     competitor_file_id: int
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
+    file_size: Optional[int] = None  # 文件大小（字节）
     
     class Config:
         from_attributes = True
@@ -130,6 +155,58 @@ class SensorResponse(SensorBase):
 class MessageResponse(BaseModel):
     message: str
 
+# 用户权限相关模式
+class UserPermissionBase(BaseModel):
+    module: ModuleEnum
+    can_read: bool = False
+    can_write: bool = False
+    can_delete: bool = False
+
+class UserPermissionCreate(UserPermissionBase):
+    user_id: int
+
+class UserPermissionUpdate(UserPermissionBase):
+    pass
+
+class UserPermissionResponse(UserPermissionBase):
+    permission_id: int
+    user_id: int
+    
+    class Config:
+        from_attributes = True
+
+# 用户相关模式
+class UserBase(BaseModel):
+    username: str
+    role: RoleEnum
+
+class UserCreate(UserBase):
+    password: str
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    role: Optional[RoleEnum] = None
+
+class UserResponse(UserBase):
+    user_id: int
+    createTime: datetime
+    updateTime: datetime
+    permissions: List[UserPermissionResponse] = []
+    
+    class Config:
+        from_attributes = True
+
+class UserListResponse(BaseModel):
+    user_id: int
+    username: str
+    role: RoleEnum
+    createTime: datetime
+    updateTime: datetime
+    
+    class Config:
+        from_attributes = True
+
 # 登录相关模式
 class LoginRequest(BaseModel):
     username: str
@@ -139,3 +216,25 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     user_info: dict
+
+# 权限分配相关模式
+class AssignPermissionsRequest(BaseModel):
+    user_id: int
+    permissions: List[UserPermissionBase]
+
+# 活动记录相关模式
+class ActivityBase(BaseModel):
+    activity_type: str
+    description: str
+
+class ActivityCreate(ActivityBase):
+    user_id: Optional[int] = None
+
+class ActivityResponse(ActivityBase):
+    activity_id: int
+    createTime: datetime
+    user_id: Optional[int] = None
+    username: Optional[str] = None
+    
+    class Config:
+        from_attributes = True

@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import os
 
 # 导入路由
-from routers import batches, persons, experiments, competitor_files, finger_blood_data, sensors, auth
+from routers import batches, persons, experiments, competitor_files, finger_blood_data, sensors, auth, activities
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 创建上传目录
@@ -43,6 +43,7 @@ if os.path.exists("uploads"):
 
 # 注册路由
 app.include_router(auth.router)
+app.include_router(activities.router)
 app.include_router(batches.router)
 app.include_router(persons.router)
 app.include_router(experiments.router)

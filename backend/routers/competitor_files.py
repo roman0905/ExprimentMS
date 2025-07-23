@@ -5,9 +5,12 @@ from typing import List, Optional
 import os
 import shutil
 from datetime import datetime
+import pandas as pd
+import tempfile
 from database import get_db
 from models import CompetitorFile, Batch, Person
 from schemas import CompetitorFileResponse, MessageResponse
+from routers.activities import log_activity
 
 router = APIRouter(prefix="/api/competitor-files", tags=["竞品数据管理"])
 
@@ -37,13 +40,22 @@ def get_competitor_files(
     # 添加关联信息
     result = []
     for file in files:
+        # 获取文件大小
+        file_size = None
+        if os.path.exists(file.file_path):
+            try:
+                file_size = os.path.getsize(file.file_path)
+            except OSError:
+                file_size = None
+        
         file_dict = {
             "competitor_file_id": file.competitor_file_id,
             "person_id": file.person_id,
             "batch_id": file.batch_id,
             "file_path": file.file_path,
             "person_name": file.person.person_name if file.person else None,
-            "batch_number": file.batch.batch_number if file.batch else None
+            "batch_number": file.batch.batch_number if file.batch else None,
+            "file_size": file_size
         }
         result.append(CompetitorFileResponse(**file_dict))
     
@@ -90,13 +102,22 @@ async def upload_competitor_file(
     db.commit()
     db.refresh(db_file)
     
+    # 获取上传文件的大小
+    file_size = None
+    if os.path.exists(file_path):
+        try:
+            file_size = os.path.getsize(file_path)
+        except OSError:
+            file_size = None
+    
     result = CompetitorFileResponse(
         competitor_file_id=db_file.competitor_file_id,
         person_id=db_file.person_id,
         batch_id=db_file.batch_id,
         file_path=db_file.file_path,
         person_name=person.person_name,
-        batch_number=batch.batch_number
+        batch_number=batch.batch_number,
+        file_size=file_size
     )
     
     return result
@@ -120,6 +141,69 @@ def download_competitor_file(file_id: int, db: Session = Depends(get_db)):
         media_type='application/octet-stream'
     )
 
+@router.put("/{file_id}/rename", response_model=CompetitorFileResponse)
+def rename_competitor_file(file_id: int, rename_data: dict, db: Session = Depends(get_db)):
+    """重命名竞品文件"""
+    file_record = db.query(CompetitorFile).filter(CompetitorFile.competitor_file_id == file_id).first()
+    if not file_record:
+        raise HTTPException(status_code=404, detail="文件不存在")
+    
+    new_file_name = rename_data.get("new_file_name")
+    if not new_file_name:
+        raise HTTPException(status_code=400, detail="新文件名不能为空")
+    
+    # 验证文件名格式
+    import re
+    if not re.match(r'^[^<>:"/\\|?*]+$', new_file_name):
+        raise HTTPException(status_code=400, detail="文件名包含非法字符")
+    
+    # 获取原文件路径和目录
+    old_file_path = file_record.file_path
+    file_dir = os.path.dirname(old_file_path)
+    
+    # 构建新文件路径
+    new_file_path = os.path.join(file_dir, new_file_name)
+    
+    # 检查新文件是否已存在
+    if os.path.exists(new_file_path) and new_file_path != old_file_path:
+        raise HTTPException(status_code=400, detail="目标文件名已存在")
+    
+    # 重命名物理文件
+    if os.path.exists(old_file_path):
+        try:
+            os.rename(old_file_path, new_file_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"文件重命名失败: {str(e)}")
+    
+    # 更新数据库记录
+    file_record.file_path = new_file_path
+    db.commit()
+    db.refresh(file_record)
+    
+    # 获取关联信息
+    batch = db.query(Batch).filter(Batch.batch_id == file_record.batch_id).first()
+    person = db.query(Person).filter(Person.person_id == file_record.person_id).first()
+    
+    # 获取文件大小
+    file_size = None
+    if os.path.exists(new_file_path):
+        try:
+            file_size = os.path.getsize(new_file_path)
+        except OSError:
+            file_size = None
+    
+    result = CompetitorFileResponse(
+        competitor_file_id=file_record.competitor_file_id,
+        person_id=file_record.person_id,
+        batch_id=file_record.batch_id,
+        file_path=file_record.file_path,
+        person_name=person.person_name if person else None,
+        batch_number=batch.batch_number if batch else None,
+        file_size=file_size
+    )
+    
+    return result
+
 @router.delete("/{file_id}", response_model=MessageResponse)
 def delete_competitor_file(file_id: int, db: Session = Depends(get_db)):
     """删除竞品文件"""
@@ -139,3 +223,102 @@ def delete_competitor_file(file_id: int, db: Session = Depends(get_db)):
     db.commit()
     
     return MessageResponse(message="文件删除成功")
+
+@router.get("/export")
+def export_competitor_files(
+    batch_id: Optional[int] = Query(None, description="按批次筛选"),
+    person_id: Optional[int] = Query(None, description="按人员筛选"),
+    db: Session = Depends(get_db)
+):
+    """导出竞品文件数据为Excel"""
+    query = db.query(CompetitorFile).join(Batch).join(Person)
+    
+    if batch_id:
+        query = query.filter(CompetitorFile.batch_id == batch_id)
+    
+    if person_id:
+        query = query.filter(CompetitorFile.person_id == person_id)
+    
+    files = query.all()
+    
+    # 准备导出数据
+    export_data = []
+    for file in files:
+        # 获取文件大小
+        file_size = None
+        if os.path.exists(file.file_path):
+            try:
+                file_size = os.path.getsize(file.file_path)
+            except OSError:
+                file_size = None
+        
+        # 格式化文件大小
+        file_size_str = "未知大小"
+        if file_size is not None:
+            if file_size < 1024:
+                file_size_str = f"{file_size} B"
+            elif file_size < 1024 * 1024:
+                file_size_str = f"{file_size / 1024:.1f} KB"
+            elif file_size < 1024 * 1024 * 1024:
+                file_size_str = f"{file_size / (1024 * 1024):.1f} MB"
+            else:
+                file_size_str = f"{file_size / (1024 * 1024 * 1024):.1f} GB"
+        
+        # 从文件路径获取文件名
+        filename = os.path.basename(file.file_path) if file.file_path else "未知文件"
+        
+        export_data.append({
+            "文件ID": file.competitor_file_id,
+            "文件名": filename,
+            "关联批次": file.batch.batch_number if file.batch else "未知批次",
+            "关联人员": file.person.person_name if file.person else "未知人员",
+            "文件大小": file_size_str,
+            "文件路径": file.file_path
+        })
+    
+    # 创建DataFrame
+    df = pd.DataFrame(export_data)
+    
+    # 创建临时文件
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
+        # 写入Excel文件
+        with pd.ExcelWriter(tmp_file.name, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='竞品数据', index=False)
+            
+            # 调整列宽
+            worksheet = writer.sheets['竞品数据']
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        # 记录活动
+        filter_desc = []
+        if batch_id:
+            batch = db.query(Batch).filter(Batch.batch_id == batch_id).first()
+            if batch:
+                filter_desc.append(f"批次：{batch.batch_number}")
+        if person_id:
+            person = db.query(Person).filter(Person.person_id == person_id).first()
+            if person:
+                filter_desc.append(f"人员：{person.person_name}")
+        
+        filter_text = f"（筛选条件：{', '.join(filter_desc)}）" if filter_desc else ""
+        log_activity(db, "data_export", f"导出了竞品数据{filter_text}")
+        
+        # 生成文件名
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"竞品数据导出_{timestamp}.xlsx"
+        
+        return FileResponse(
+            path=tmp_file.name,
+            filename=filename,
+            media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )

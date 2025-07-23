@@ -180,13 +180,13 @@ export const useDataStore = defineStore('data', () => {
   }
 
   // 竞品文件管理
-  const addCompetitorFile = async (file: Omit<CompetitorFile, 'competitor_file_id'>) => {
+  const addCompetitorFile = async (formData: FormData) => {
     try {
-      const newFile = await ApiService.createCompetitorFile(file)
+      const newFile = await ApiService.uploadCompetitorFile(formData)
       competitorFiles.value.push(newFile)
       return newFile
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '创建竞品文件失败'
+      error.value = err instanceof Error ? err.message : '上传竞品文件失败'
       throw err
     }
   }

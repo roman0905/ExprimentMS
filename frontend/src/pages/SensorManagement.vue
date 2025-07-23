@@ -368,7 +368,8 @@ const filteredSensors = computed(() => {
     }
   }
   
-  return result
+  // 按传感器ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.sensor_id - a.sensor_id)
 })
 
 // 当前页数据

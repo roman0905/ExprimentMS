@@ -11,6 +11,7 @@ import ExperimentManagement from '../pages/ExperimentManagement.vue'
 import CompetitorData from '../pages/CompetitorData.vue'
 import FingerBloodData from '../pages/FingerBloodData.vue'
 import SensorManagement from '../pages/SensorManagement.vue'
+import UserManagement from '../pages/UserManagement.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -48,7 +49,8 @@ const routes: RouteRecordRaw[] = [
         component: BatchManagement,
         meta: {
           title: '批次管理',
-          icon: 'Collection'
+          icon: 'Collection',
+          module: 'batch_management'
         }
       },
       {
@@ -57,7 +59,8 @@ const routes: RouteRecordRaw[] = [
         component: PersonManagement,
         meta: {
           title: '人员管理',
-          icon: 'User'
+          icon: 'User',
+          module: 'person_management'
         }
       },
       {
@@ -66,7 +69,8 @@ const routes: RouteRecordRaw[] = [
         component: ExperimentManagement,
         meta: {
           title: '实验管理',
-          icon: 'DataAnalysis'
+          icon: 'DataAnalysis',
+          module: 'experiment_management'
         }
       },
       {
@@ -75,7 +79,8 @@ const routes: RouteRecordRaw[] = [
         component: CompetitorData,
         meta: {
           title: '竞品数据',
-          icon: 'Files'
+          icon: 'Files',
+          module: 'competitor_data'
         }
       },
       {
@@ -84,7 +89,8 @@ const routes: RouteRecordRaw[] = [
         component: FingerBloodData,
         meta: {
           title: '指尖血数据',
-          icon: 'TrendCharts'
+          icon: 'TrendCharts',
+          module: 'finger_blood_data'
         }
       },
       {
@@ -93,7 +99,19 @@ const routes: RouteRecordRaw[] = [
         component: SensorManagement,
         meta: {
           title: '传感器管理',
-          icon: 'Monitor'
+          icon: 'Monitor',
+          module: 'sensor_data'
+        }
+      },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: UserManagement,
+        meta: {
+          title: '用户管理',
+          icon: 'UserFilled',
+          module: 'user_management',
+          adminOnly: true
         }
       }
     ]
@@ -111,7 +129,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
   
   // 设置页面标题
@@ -130,6 +148,21 @@ router.beforeEach((to, from, next) => {
         query: { redirect: to.fullPath }
       })
       return
+    }
+    
+    // 检查权限
+    if (to.meta.module) {
+      // 检查管理员权限
+      if (to.meta.adminOnly && !authStore.isAdmin) {
+        next('/dashboard')
+        return
+      }
+      
+      // 检查模块权限（非管理员需要检查）
+      if (!authStore.isAdmin && !authStore.hasAnyPermission(to.meta.module as string)) {
+        next('/dashboard')
+        return
+      }
     }
   } else {
     // 如果已登录且访问登录页，重定向到首页

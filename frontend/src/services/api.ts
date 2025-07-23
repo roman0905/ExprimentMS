@@ -52,13 +52,30 @@ export interface Person {
   age?: number
 }
 
+export interface ExperimentMember {
+  id: number
+  experiment_id: number
+  person_id: number
+  person_name?: string
+}
+
 export interface Experiment {
   experiment_id: number
   batch_id: number
-  person_id: number
   experiment_content?: string
   batch_number?: string
-  person_name?: string
+  created_time?: string
+  members?: ExperimentMember[]
+  member_ids?: number[]
+}
+
+export interface Activity {
+  activity_id: number
+  activity_type: string
+  description: string
+  createTime: string
+  user_id?: number
+  username?: string
 }
 
 export interface CompetitorFile {
@@ -68,6 +85,7 @@ export interface CompetitorFile {
   file_path: string
   person_name?: string
   batch_number?: string
+  file_size?: number  // 文件大小（字节）
 }
 
 export interface FingerBloodData {
@@ -149,12 +167,27 @@ export class ApiService {
     return api.get('/api/competitor-files/')
   }
 
-  static async createCompetitorFile(file: Omit<CompetitorFile, 'competitor_file_id'>): Promise<CompetitorFile> {
-    return api.post('/api/competitor-files/', file)
+  static async uploadCompetitorFile(formData: FormData): Promise<CompetitorFile> {
+    return api.post('/api/competitor-files/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+  }
+
+  static async downloadCompetitorFile(id: number): Promise<Blob> {
+    const response = await api.get(`/api/competitor-files/download/${id}`, {
+      responseType: 'blob'
+    })
+    return response.data
   }
 
   static async deleteCompetitorFile(id: number): Promise<void> {
     return api.delete(`/api/competitor-files/${id}`)
+  }
+
+  static async renameCompetitorFile(id: number, newFileName: string): Promise<CompetitorFile> {
+    return api.put(`/api/competitor-files/${id}/rename`, { new_file_name: newFileName })
   }
 
   // 指尖血数据管理
@@ -174,6 +207,24 @@ export class ApiService {
     return api.delete(`/api/finger-blood-data/${id}`)
   }
 
+  static async exportFingerBloodData(params?: {
+    batch_id?: number;
+    person_id?: number;
+    start_time?: string;
+    end_time?: string;
+  }): Promise<Blob> {
+    const searchParams = new URLSearchParams()
+    if (params?.batch_id) searchParams.append('batch_id', params.batch_id.toString())
+    if (params?.person_id) searchParams.append('person_id', params.person_id.toString())
+    if (params?.start_time) searchParams.append('start_time', params.start_time)
+    if (params?.end_time) searchParams.append('end_time', params.end_time)
+    
+    const response = await api.get(`/api/finger-blood-data/export/excel?${searchParams.toString()}`, {
+      responseType: 'blob'
+    })
+    return response.data
+  }
+
   // 传感器管理
   static async getSensors(): Promise<Sensor[]> {
     return api.get('/api/sensors/')
@@ -189,6 +240,27 @@ export class ApiService {
 
   static async deleteSensor(id: number): Promise<void> {
     return api.delete(`/api/sensors/${id}`)
+  }
+
+  // 活动记录管理
+  static async getActivities(limit: number = 10): Promise<Activity[]> {
+    return api.get(`/api/activities/?limit=${limit}`)
+  }
+
+  static async createActivity(activity: Omit<Activity, 'activity_id' | 'created_time'>): Promise<Activity> {
+    return api.post('/api/activities/', activity)
+  }
+
+  // 竞品数据导出
+  static async exportCompetitorData(batchId?: number, personId?: number): Promise<Blob> {
+    const params = new URLSearchParams()
+    if (batchId) params.append('batch_id', batchId.toString())
+    if (personId) params.append('person_id', personId.toString())
+    
+    const response = await api.get(`/api/competitor-files/export?${params.toString()}`, {
+      responseType: 'blob'
+    })
+    return response.data
   }
 }
 

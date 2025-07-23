@@ -22,34 +22,60 @@
             <template #title>首页</template>
           </el-menu-item>
           
-          <el-menu-item index="/batches">
+          <el-menu-item 
+            v-if="hasPermission('batch_management')"
+            index="/batches"
+          >
             <el-icon><Collection /></el-icon>
             <template #title>批次管理</template>
           </el-menu-item>
           
-          <el-menu-item index="/persons">
+          <el-menu-item 
+            v-if="hasPermission('person_management')"
+            index="/persons"
+          >
             <el-icon><User /></el-icon>
             <template #title>人员管理</template>
           </el-menu-item>
           
-          <el-menu-item index="/experiments">
+          <el-menu-item 
+            v-if="hasPermission('experiment_management')"
+            index="/experiments"
+          >
             <el-icon><DataAnalysis /></el-icon>
             <template #title>实验管理</template>
           </el-menu-item>
           
-          <el-menu-item index="/competitor-data">
+          <el-menu-item 
+            v-if="hasPermission('competitor_data')"
+            index="/competitor-data"
+          >
             <el-icon><Files /></el-icon>
             <template #title>竞品数据</template>
           </el-menu-item>
           
-          <el-menu-item index="/finger-blood-data">
+          <el-menu-item 
+            v-if="hasPermission('finger_blood_data')"
+            index="/finger-blood-data"
+          >
             <el-icon><TrendCharts /></el-icon>
             <template #title>指尖血数据</template>
           </el-menu-item>
           
-          <el-menu-item index="/sensors">
+          <el-menu-item 
+            v-if="hasPermission('sensor_data')"
+            index="/sensors"
+          >
             <el-icon><Monitor /></el-icon>
             <template #title>传感器管理</template>
+          </el-menu-item>
+          
+          <el-menu-item 
+            v-if="authStore.isAdmin"
+            index="/users"
+          >
+            <el-icon><UserFilled /></el-icon>
+            <template #title>用户管理</template>
           </el-menu-item>
         </el-menu>
       </el-aside>
@@ -104,6 +130,7 @@ import {
   House,
   Collection,
   User,
+  UserFilled,
   FolderOpened,
   Document,
   TrendCharts,
@@ -132,6 +159,10 @@ const toggleCollapse = () => {
   isCollapse.value = !isCollapse.value
 }
 
+const hasPermission = (module: string) => {
+  return authStore.isAdmin || authStore.hasAnyPermission(module)
+}
+
 const handleCommand = async (command: string) => {
   if (command === 'logout') {
     try {
@@ -145,7 +176,7 @@ const handleCommand = async (command: string) => {
         }
       )
       
-      authStore.logout()
+      await authStore.logout()
       ElMessage.success('已退出登录')
       router.push('/login')
     } catch {
@@ -154,8 +185,9 @@ const handleCommand = async (command: string) => {
   }
 }
 
-onMounted(() => {
-  authStore.initAuth()
+onMounted(async () => {
+  await authStore.initAuth()
+  authStore.setupApiInterceptors()
 })
 </script>
 

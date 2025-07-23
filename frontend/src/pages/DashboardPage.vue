@@ -114,7 +114,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import {
   Collection,
   User,
@@ -126,36 +126,89 @@ import {
   DataLine
 } from '@element-plus/icons-vue'
 import { useDataStore } from '../stores/data'
+import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+const recentActivities = ref([])
+const loading = ref(false)
 
-// 模拟最近活动数据
-const recentActivities = computed(() => [
-  {
-    id: 1,
-    description: '创建了新批次 BATCH002',
-    time: '2024-01-02 09:00:00',
-    type: 'primary'
-  },
-  {
-    id: 2,
-    description: '添加了受试人员 李四',
-    time: '2024-01-01 16:30:00',
-    type: 'success'
-  },
-  {
-    id: 3,
-    description: '录入了血糖数据',
-    time: '2024-01-01 14:00:00',
-    type: 'warning'
-  },
-  {
-    id: 4,
-    description: '创建了血糖监测实验',
-    time: '2024-01-01 10:00:00',
-    type: 'info'
+// 获取最近活动数据
+const fetchRecentActivities = async () => {
+  try {
+    loading.value = true
+    const activities = await ApiService.getActivities()
+    recentActivities.value = activities.map(activity => ({
+      id: activity.activity_id,
+      description: activity.description,
+      time: new Date(activity.createTime).toLocaleString('zh-CN'),
+      type: getActivityType(activity.activity_type)
+    }))
+  } catch (error) {
+    console.error('获取活动数据失败:', error)
+    // 使用模拟数据作为后备
+    recentActivities.value = [
+      {
+        id: 1,
+        description: '创建了新批次 BATCH002',
+        time: '2024-01-02 09:00:00',
+        type: 'primary'
+      },
+      {
+        id: 2,
+        description: '添加了受试人员 李四',
+        time: '2024-01-01 16:30:00',
+        type: 'success'
+      },
+      {
+        id: 3,
+        description: '录入了血糖数据',
+        time: '2024-01-01 14:00:00',
+        type: 'warning'
+      },
+      {
+        id: 4,
+        description: '创建了血糖监测实验',
+        time: '2024-01-01 10:00:00',
+        type: 'info'
+      }
+    ]
+  } finally {
+    loading.value = false
   }
-])
+}
+
+// 根据活动类型返回对应的时间线类型
+const getActivityType = (activityType: string) => {
+  switch (activityType) {
+    case 'experiment_create':
+    case 'experiment_update':
+      return 'primary'
+    case 'batch_create':
+    case 'person_create':
+      return 'success'
+    case 'data_export':
+      return 'warning'
+    case 'experiment_delete':
+      return 'danger'
+    default:
+      return 'info'
+  }
+}
+
+// 定时刷新活动数据
+let refreshInterval: number | null = null
+
+onMounted(() => {
+  fetchRecentActivities()
+  // 每30秒刷新一次活动数据
+  refreshInterval = setInterval(fetchRecentActivities, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshInterval) {
+    clearInterval(refreshInterval)
+  }
+})
 </script>
 
 <style scoped>

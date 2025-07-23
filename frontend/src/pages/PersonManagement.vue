@@ -42,7 +42,7 @@
         v-loading="loading"
       >
         <el-table-column prop="person_id" label="人员ID" width="100" />
-        <el-table-column prop="person_name" label="姓名" width="120">
+        <el-table-column prop="person_name" label="姓名" min-width="120">
           <template #default="{ row }">
             <el-tag type="success" size="small">
               {{ row.person_name }}
@@ -59,22 +59,22 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="age" label="年龄" width="80">
+        <el-table-column prop="age" label="年龄" min-width="80">
           <template #default="{ row }">
             {{ row.age || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="height_cm" label="身高(cm)" width="100">
+        <el-table-column prop="height_cm" label="身高(cm)" min-width="100">
           <template #default="{ row }">
             {{ row.height_cm || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="weight_kg" label="体重(kg)" width="100">
+        <el-table-column prop="weight_kg" label="体重(kg)" min-width="100">
           <template #default="{ row }">
             {{ row.weight_kg || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="BMI" width="80">
+        <el-table-column label="BMI" min-width="80">
           <template #default="{ row }">
             {{ calculateBMI(row.height_cm, row.weight_kg) }}
           </template>
@@ -246,12 +246,16 @@ const rules = {
 
 // 过滤后的人员列表
 const filteredPersons = computed(() => {
-  if (!searchText.value) {
-    return dataStore.persons
+  let result = dataStore.persons
+  
+  if (searchText.value) {
+    result = result.filter(person => 
+      person.person_name.toLowerCase().includes(searchText.value.toLowerCase())
+    )
   }
-  return dataStore.persons.filter(person => 
-    person.person_name.toLowerCase().includes(searchText.value.toLowerCase())
-  )
+  
+  // 按人员ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.person_id - a.person_id)
 })
 
 // 当前页数据

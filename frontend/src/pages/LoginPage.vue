@@ -86,13 +86,12 @@ const rules = {
 const handleLogin = async () => {
   if (!loginFormRef.value) return
   
-  await loginFormRef.value.validate((valid) => {
+  await loginFormRef.value.validate(async (valid) => {
     if (valid) {
       loading.value = true
       
-      // 模拟登录延迟
-      setTimeout(() => {
-        const success = authStore.login(loginForm.username, loginForm.password)
+      try {
+        const success = await authStore.login(loginForm.username, loginForm.password)
         
         if (success) {
           ElMessage.success('登录成功')
@@ -100,9 +99,12 @@ const handleLogin = async () => {
         } else {
           ElMessage.error('用户名或密码错误')
         }
-        
+      } catch (error) {
+        console.error('登录错误:', error)
+        ElMessage.error('登录失败，请稍后重试')
+      } finally {
         loading.value = false
-      }, 1000)
+      }
     }
   })
 }

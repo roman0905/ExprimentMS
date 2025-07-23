@@ -40,6 +40,10 @@
       </div>
       
       <div class="toolbar-right">
+        <el-button @click="handleExport" :loading="exporting">
+          <el-icon><Download /></el-icon>
+          导出数据
+        </el-button>
         <el-button type="primary" @click="handleUpload">
           <el-icon><Upload /></el-icon>
           上传文件
@@ -80,10 +84,10 @@
         </el-table-column>
         <el-table-column label="文件大小" width="100">
           <template #default="{ row }">
-            {{ getFileSize(row.file_path) }}
+            {{ getFileSize(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
               type="primary"
@@ -92,6 +96,14 @@
             >
               <el-icon><Download /></el-icon>
               下载
+            </el-button>
+            <el-button
+              type="warning"
+              size="small"
+              @click="handleRename(row)"
+            >
+              <el-icon><Edit /></el-icon>
+              重命名
             </el-button>
             <el-button
               type="danger"
@@ -194,6 +206,46 @@
         </span>
       </template>
     </el-dialog>
+    
+    <!-- 重命名对话框 -->
+    <el-dialog
+      v-model="renameDialogVisible"
+      title="重命名文件"
+      width="500px"
+      @close="resetRenameForm"
+    >
+      <el-form
+        ref="renameFormRef"
+        :model="renameForm"
+        :rules="renameRules"
+        label-width="80px"
+      >
+        <el-form-item label="当前文件名">
+          <el-input
+            :value="currentFileName"
+            readonly
+            style="width: 100%"
+          />
+        </el-form-item>
+        
+        <el-form-item label="新文件名" prop="newFileName">
+          <el-input
+            v-model="renameForm.newFileName"
+            placeholder="请输入新的文件名"
+            style="width: 100%"
+          />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="renameDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="handleSubmitRename" :loading="renaming">
+            确定重命名
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -205,8 +257,10 @@ import {
   Download,
   Delete,
   Document,
-  UploadFilled
+  UploadFilled,
+  Edit
 } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { useDataStore, type CompetitorFile } from '../stores/data'
 import { ApiService } from '../services/api'
 
@@ -228,12 +282,18 @@ onMounted(async () => {
 
 const loading = ref(false)
 const uploading = ref(false)
+const exporting = ref(false)
+const renaming = ref(false)
 const filterBatchId = ref<number | undefined>()
 const filterPersonId = ref<number | undefined>()
 const uploadDialogVisible = ref(false)
+const renameDialogVisible = ref(false)
 const uploadFormRef = ref<FormInstance>()
+const renameFormRef = ref<FormInstance>()
 const uploadRef = ref()
 const fileList = ref<UploadFile[]>([])
+const currentFileName = ref('')
+const currentFileId = ref<number | null>(null)
 
 // 分页相关
 const currentPage = ref(1)
@@ -246,6 +306,10 @@ const uploadForm = reactive({
   file: null as File | null
 })
 
+const renameForm = reactive({
+  newFileName: ''
+})
+
 const uploadRules = {
   batch_id: [
     { required: true, message: '请选择关联批次', trigger: 'change' }
@@ -255,6 +319,18 @@ const uploadRules = {
   ],
   file: [
     { required: true, message: '请选择要上传的文件', trigger: 'change' }
+  ]
+}
+
+const renameRules = {
+  newFileName: [
+    { required: true, message: '请输入新的文件名', trigger: 'blur' },
+    { min: 1, max: 255, message: '文件名长度应在1-255个字符之间', trigger: 'blur' },
+    {
+      pattern: /^[^<>:"/\\|?*]+$/,
+      message: '文件名不能包含以下字符: < > : " / \\ | ? *',
+      trigger: 'blur'
+    }
   ]
 }
 
@@ -270,7 +346,8 @@ const filteredFiles = computed(() => {
     result = result.filter(file => file.person_id === filterPersonId.value)
   }
   
-  return result
+  // 按竞品文件ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.competitor_file_id - a.competitor_file_id)
 })
 
 // 当前页数据
@@ -302,16 +379,25 @@ const getFileName = (filePath: string): string => {
   return parts[parts.length - 1] || '未知文件'
 }
 
-// 模拟获取文件大小
-const getFileSize = (filePath: string): string => {
-  // 模拟文件大小
-  const sizes = ['1.2MB', '856KB', '2.1MB', '654KB', '3.4MB']
-  const fileName = getFileName(filePath)
-  const hash = fileName.split('').reduce((a, b) => {
-    a = ((a << 5) - a) + b.charCodeAt(0)
-    return a & a
-  }, 0)
-  return sizes[Math.abs(hash) % sizes.length]
+// 格式化文件大小
+const formatFileSize = (bytes: number | null | undefined): string => {
+  if (!bytes || bytes === 0) return '未知大小'
+  
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let unitIndex = 0
+  
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex++
+  }
+  
+  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+// 获取文件大小
+const getFileSize = (row: CompetitorFile): string => {
+  return formatFileSize(row.file_size)
 }
 
 // 分页事件处理
@@ -361,37 +447,101 @@ const handleFileChange = (file: UploadFile) => {
 const handleSubmitUpload = async () => {
   if (!uploadFormRef.value) return
   
-  await uploadFormRef.value.validate((valid) => {
+  await uploadFormRef.value.validate(async (valid) => {
     if (valid && uploadForm.file) {
       uploading.value = true
       
-      // 模拟上传过程
-      setTimeout(() => {
-        dataStore.addCompetitorFile({
-          batch_id: uploadForm.batch_id!,
-          person_id: uploadForm.person_id!,
-          file_path: uploadForm.file!.name
-        })
+      try {
+        // 创建FormData对象
+        const formData = new FormData()
+        formData.append('batch_id', uploadForm.batch_id!.toString())
+        formData.append('person_id', uploadForm.person_id!.toString())
+        formData.append('file', uploadForm.file!)
+        
+        // 调用API上传文件
+        const result = await ApiService.uploadCompetitorFile(formData)
+        
+        // 更新本地数据
+        dataStore.competitorFiles.push(result)
         
         ElMessage.success('文件上传成功')
         uploadDialogVisible.value = false
         resetUploadForm()
+      } catch (error) {
+        console.error('文件上传失败:', error)
+        ElMessage.error('文件上传失败，请重试')
+      } finally {
         uploading.value = false
-      }, 2000)
+      }
     }
   })
 }
 
 // 下载文件
-const handleDownload = (row: CompetitorFile) => {
-  // 模拟文件下载
-  const fileName = getFileName(row.file_path)
-  ElMessage.info(`正在下载文件: ${fileName}`)
-  
-  // 实际项目中这里应该调用下载API
-  setTimeout(() => {
+const handleDownload = async (row: CompetitorFile) => {
+  try {
+    const fileName = getFileName(row.file_path)
+    ElMessage.info(`正在下载文件: ${fileName}`)
+    
+    // 调用API下载文件
+    const blob = await ApiService.downloadCompetitorFile(row.competitor_file_id)
+    
+    // 创建下载链接
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    
+    // 清理
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
     ElMessage.success('文件下载完成')
-  }, 1000)
+  } catch (error) {
+    console.error('文件下载失败:', error)
+    ElMessage.error('文件下载失败，请重试')
+  }
+}
+
+// 重命名文件
+const handleRename = (row: CompetitorFile) => {
+  currentFileId.value = row.competitor_file_id
+  currentFileName.value = getFileName(row.file_path)
+  renameForm.newFileName = currentFileName.value
+  renameDialogVisible.value = true
+}
+
+// 提交重命名
+const handleSubmitRename = async () => {
+  if (!renameFormRef.value) return
+  
+  await renameFormRef.value.validate(async (valid) => {
+    if (valid && currentFileId.value) {
+      renaming.value = true
+      
+      try {
+        // 调用API重命名文件
+        const result = await ApiService.renameCompetitorFile(currentFileId.value, renameForm.newFileName)
+        
+        // 更新本地数据
+        const fileIndex = dataStore.competitorFiles.findIndex(f => f.competitor_file_id === currentFileId.value)
+        if (fileIndex !== -1) {
+          dataStore.competitorFiles[fileIndex] = result
+        }
+        
+        ElMessage.success('文件重命名成功')
+        renameDialogVisible.value = false
+        resetRenameForm()
+      } catch (error) {
+        console.error('文件重命名失败:', error)
+        ElMessage.error('文件重命名失败，请重试')
+      } finally {
+        renaming.value = false
+      }
+    }
+  })
 }
 
 // 删除文件
@@ -408,10 +558,78 @@ const handleDelete = async (row: CompetitorFile) => {
       }
     )
     
+    // 调用API删除文件
+    await ApiService.deleteCompetitorFile(row.competitor_file_id)
+    
+    // 更新本地数据
     dataStore.deleteCompetitorFile(row.competitor_file_id)
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('文件删除失败:', error)
+      ElMessage.error('文件删除失败，请重试')
+    }
+  }
+}
+
+// 导出数据
+const handleExport = () => {
+  try {
+    exporting.value = true
+    
+    // 准备导出数据，映射字段名
+    const exportData = filteredFiles.value.map(item => ({
+      '文件ID': item.competitor_file_id,
+      '文件名': getFileName(item.file_path),
+      '关联批次': getBatchNumber(item.batch_id),
+      '关联人员': getPersonName(item.person_id),
+      '文件大小': getFileSize(item)
+    }))
+
+    // 创建工作簿和工作表
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    
+    // 设置列宽
+    ws['!cols'] = [
+      { wch: 10 }, // 文件ID
+      { wch: 30 }, // 文件名
+      { wch: 20 }, // 关联批次
+      { wch: 25 }, // 关联人员
+      { wch: 15 }  // 文件大小
+    ]
+    
+    // 添加工作表到工作簿
+    XLSX.utils.book_append_sheet(wb, ws, '竞品数据')
+    
+    // 生成文件名
+    const now = new Date()
+    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
+    let filename = `竞品数据_${timestamp}.xlsx`
+    
+    // 如果有筛选条件，添加到文件名中
+    if (filterBatchId.value || filterPersonId.value) {
+      const filters = []
+      if (filterBatchId.value) {
+        const batchNumber = getBatchNumber(filterBatchId.value)
+        filters.push(`批次${batchNumber}`)
+      }
+      if (filterPersonId.value) {
+        const personName = getPersonName(filterPersonId.value).split(' ')[0]
+        filters.push(`人员${personName}`)
+      }
+      filename = `竞品数据_${filters.join('_')}_${timestamp}.xlsx`
+    }
+    
+    // 导出文件
+    XLSX.writeFile(wb, filename)
+    
+    ElMessage.success('数据导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('数据导出失败，请重试')
+  } finally {
+    exporting.value = false
   }
 }
 
@@ -429,6 +647,18 @@ const resetUploadForm = () => {
     file: null
   })
   fileList.value = []
+}
+
+// 重置重命名表单
+const resetRenameForm = () => {
+  if (renameFormRef.value) {
+    renameFormRef.value.resetFields()
+  }
+  Object.assign(renameForm, {
+    newFileName: ''
+  })
+  currentFileName.value = ''
+  currentFileId.value = null
 }
 </script>
 

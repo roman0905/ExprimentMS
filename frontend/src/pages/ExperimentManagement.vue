@@ -67,11 +67,47 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="人员姓名" width="120">
+        <el-table-column label="实验成员" min-width="300">
           <template #default="{ row }">
-            <el-tag type="success">
-              {{ getPersonName(row.person_id) }}
-            </el-tag>
+            <div class="members-cell">
+              <div v-if="row.members && row.members.length > 0" class="members-group">
+                <div class="members-header">
+                  <el-icon class="group-icon"><User /></el-icon>
+                  <span class="member-count">{{ row.members.length }}人小组</span>
+                </div>
+                <div class="members-list">
+                  <div 
+                    v-for="(member, index) in row.members" 
+                    :key="member.id"
+                    class="member-item"
+                  >
+                    <div class="member-avatar">
+                      {{ member.person_name.charAt(0) }}
+                    </div>
+                    <div class="member-info">
+                      <span class="member-name">{{ member.person_name }}</span>
+                      <span class="member-id">ID: {{ member.person_id }}</span>
+                    </div>
+                    <el-tag 
+                      :type="index === 0 ? 'warning' : 'info'" 
+                      size="small"
+                      class="member-role"
+                    >
+                      {{ index === 0 ? '组长' : '成员' }}
+                    </el-tag>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="no-members">
+                <el-icon><UserFilled /></el-icon>
+                <span>暂无成员</span>
+              </div>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_time" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.created_time) }}
           </template>
         </el-table-column>
         <el-table-column prop="experiment_content" label="实验内容" min-width="200">
@@ -143,11 +179,14 @@
           </el-select>
         </el-form-item>
         
-        <el-form-item label="关联人员" prop="person_id">
+        <el-form-item label="实验成员" prop="member_ids">
           <el-select
-            v-model="form.person_id"
-            placeholder="请选择人员"
+            v-model="form.member_ids"
+            placeholder="请选择实验成员"
+            multiple
             style="width: 100%"
+            collapse-tags
+            collapse-tags-tooltip
           >
             <el-option
               v-for="person in dataStore.persons"
@@ -156,6 +195,9 @@
               :value="person.person_id"
             />
           </el-select>
+          <div class="form-tip">
+            可选择多个成员参与实验
+          </div>
         </el-form-item>
         
         <el-form-item label="实验内容" prop="experiment_content">
@@ -181,7 +223,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Search, Plus, Download } from '@element-plus/icons-vue'
+import { Search, Plus, Download, User, UserFilled } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type Experiment } from '../stores/data'
 import { ApiService } from '../services/api'
@@ -217,7 +259,7 @@ const pageSizes = [10, 20, 50, 100]
 const form = reactive({
   experiment_id: 0,
   batch_id: undefined as number | undefined,
-  person_id: undefined as number | undefined,
+  member_ids: [] as number[],
   experiment_content: ''
 })
 
@@ -225,8 +267,9 @@ const rules = {
   batch_id: [
     { required: true, message: '请选择关联批次', trigger: 'change' }
   ],
-  person_id: [
-    { required: true, message: '请选择关联人员', trigger: 'change' }
+  member_ids: [
+    { required: true, message: '请至少选择一个实验成员', trigger: 'change' },
+    { type: 'array', min: 1, message: '请至少选择一个实验成员', trigger: 'change' }
   ],
   experiment_content: [
     { required: true, message: '请输入实验内容', trigger: 'blur' },
@@ -243,10 +286,13 @@ const filteredExperiments = computed(() => {
   }
   
   if (filterPersonId.value) {
-    result = result.filter(exp => exp.person_id === filterPersonId.value)
+    result = result.filter(exp => 
+      exp.members && exp.members.some(member => member.person_id === filterPersonId.value)
+    )
   }
   
-  return result
+  // 按实验ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.experiment_id - a.experiment_id)
 })
 
 // 当前页数据
@@ -263,6 +309,12 @@ const total = computed(() => filteredExperiments.value.length)
 const getBatchNumber = (batchId: number): string => {
   const batch = dataStore.batches.find(b => b.batch_id === batchId)
   return batch?.batch_number || '未知批次'
+}
+
+// 格式化日期时间
+const formatDateTime = (dateTime?: string): string => {
+  if (!dateTime) return '暂无'
+  return new Date(dateTime).toLocaleString('zh-CN')
 }
 
 // 获取人员姓名
@@ -299,8 +351,10 @@ const handleExport = () => {
     const exportData = filteredExperiments.value.map(experiment => ({
       '实验ID': experiment.experiment_id,
       '批次号': getBatchNumber(experiment.batch_id),
-      '人员姓名': getPersonName(experiment.person_id),
-      '实验内容': experiment.experiment_content || '暂无描述'
+      '实验成员': experiment.members?.map(m => m.person_name).join(', ') || '暂无成员',
+      '成员数量': experiment.members?.length || 0,
+      '实验内容': experiment.experiment_content || '暂无描述',
+      '创建时间': formatDateTime(experiment.created_time)
     }))
     
     // 创建工作簿
@@ -311,8 +365,10 @@ const handleExport = () => {
     const colWidths = [
       { wch: 10 }, // 实验ID
       { wch: 15 }, // 批次号
-      { wch: 15 }, // 人员姓名
-      { wch: 50 }  // 实验内容
+      { wch: 30 }, // 实验成员
+      { wch: 10 }, // 成员数量
+      { wch: 40 }, // 实验内容
+      { wch: 20 }  // 创建时间
     ]
     ws['!cols'] = colWidths
     
@@ -360,10 +416,21 @@ const handleDelete = async (row: Experiment) => {
       }
     )
     
-    dataStore.deleteExperiment(row.experiment_id)
+    loading.value = true
+    await ApiService.deleteExperiment(row.experiment_id)
+    
+    // 重新加载数据
+    const experimentsData = await ApiService.getExperiments()
+    dataStore.experiments = experimentsData
+    
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error)
+      ElMessage.error('删除失败')
+    }
+  } finally {
+    loading.value = false
   }
 }
 
@@ -371,28 +438,41 @@ const handleDelete = async (row: Experiment) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  await formRef.value.validate((valid) => {
+  await formRef.value.validate(async (valid) => {
     if (valid) {
-      if (isEdit.value) {
-        // 编辑
-        dataStore.updateExperiment(form.experiment_id, {
-          batch_id: form.batch_id!,
-          person_id: form.person_id!,
-          experiment_content: form.experiment_content
-        })
-        ElMessage.success('更新成功')
-      } else {
-        // 新建
-        dataStore.addExperiment({
-          batch_id: form.batch_id!,
-          person_id: form.person_id!,
-          experiment_content: form.experiment_content
-        })
-        ElMessage.success('创建成功')
+      try {
+        loading.value = true
+        
+        if (isEdit.value) {
+          // 编辑
+          await ApiService.updateExperiment(form.experiment_id, {
+            batch_id: form.batch_id!,
+            member_ids: form.member_ids,
+            experiment_content: form.experiment_content
+          })
+          ElMessage.success('更新成功')
+        } else {
+          // 新建
+          await ApiService.createExperiment({
+            batch_id: form.batch_id!,
+            member_ids: form.member_ids,
+            experiment_content: form.experiment_content
+          })
+          ElMessage.success('创建成功')
+        }
+        
+        // 重新加载数据
+        const experimentsData = await ApiService.getExperiments()
+        dataStore.experiments = experimentsData
+        
+        dialogVisible.value = false
+        resetForm()
+      } catch (error) {
+        console.error('Submit failed:', error)
+        ElMessage.error(isEdit.value ? '更新失败' : '创建失败')
+      } finally {
+        loading.value = false
       }
-      
-      dialogVisible.value = false
-      resetForm()
     }
   })
 }
@@ -405,7 +485,7 @@ const resetForm = () => {
   Object.assign(form, {
     experiment_id: 0,
     batch_id: undefined,
-    person_id: undefined,
+    member_ids: [],
     experiment_content: ''
   })
 }
@@ -489,5 +569,122 @@ const resetForm = () => {
 
 :deep(.el-select) {
   width: 100%;
+}
+
+.members-cell {
+  padding: 8px 0;
+}
+
+.members-group {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #e4e7ed;
+}
+
+.members-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e4e7ed;
+}
+
+.group-icon {
+  color: #409eff;
+  margin-right: 6px;
+  font-size: 16px;
+}
+
+.member-count {
+  font-size: 12px;
+  color: #606266;
+  font-weight: 500;
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #ebeef5;
+  transition: all 0.2s ease;
+}
+
+.member-item:hover {
+  border-color: #409eff;
+  box-shadow: 0 2px 4px rgba(64, 158, 255, 0.1);
+}
+
+.member-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #409eff, #67c23a);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.member-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.member-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #303133;
+  line-height: 1.2;
+}
+
+.member-id {
+  font-size: 11px;
+  color: #909399;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.member-role {
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.no-members {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #c0c4cc;
+  font-size: 13px;
+  background: #fafafa;
+  border-radius: 6px;
+  border: 1px dashed #e4e7ed;
+}
+
+.no-members .el-icon {
+  margin-right: 6px;
+  font-size: 16px;
+}
+
+.form-tip {
+  margin-top: 4px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.4;
 }
 </style>

@@ -42,20 +42,20 @@
         v-loading="loading"
       >
         <el-table-column prop="batch_id" label="批次ID" width="100" />
-        <el-table-column prop="batch_number" label="批次号" width="150">
+        <el-table-column prop="batch_number" label="批次号" min-width="150">
           <template #default="{ row }">
             <el-tag type="primary" size="small">
               {{ row.batch_number }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="start_time" label="开始时间" width="180" />
-        <el-table-column prop="end_time" label="结束时间" width="180">
+        <el-table-column prop="start_time" label="开始时间" min-width="180" />
+        <el-table-column prop="end_time" label="结束时间" min-width="180">
           <template #default="{ row }">
             {{ row.end_time || '进行中' }}
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column label="状态" min-width="100">
           <template #default="{ row }">
             <el-tag :type="row.end_time ? 'info' : 'success'">
               {{ row.end_time ? '已结束' : '进行中' }}
@@ -204,12 +204,16 @@ const rules = {
 
 // 过滤后的批次列表
 const filteredBatches = computed(() => {
-  if (!searchText.value) {
-    return dataStore.batches
+  let result = dataStore.batches
+  
+  if (searchText.value) {
+    result = result.filter(batch => 
+      batch.batch_number.toLowerCase().includes(searchText.value.toLowerCase())
+    )
   }
-  return dataStore.batches.filter(batch => 
-    batch.batch_number.toLowerCase().includes(searchText.value.toLowerCase())
-  )
+  
+  // 按批次ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.batch_id - a.batch_id)
 })
 
 // 当前页数据

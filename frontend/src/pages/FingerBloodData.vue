@@ -56,6 +56,10 @@
           <el-icon><TrendCharts /></el-icon>
           {{ showChart ? '隐藏图表' : '显示图表' }}
         </el-button>
+        <el-button @click="handleExport" :loading="exportLoading">
+          <el-icon><Download /></el-icon>
+          导出数据
+        </el-button>
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           录入数据
@@ -95,8 +99,8 @@
         v-loading="loading"
       >
         <el-table-column prop="finger_blood_file_id" label="数据ID" width="100" />
-        <el-table-column prop="collection_time" label="采集时间" width="180" />
-        <el-table-column prop="blood_glucose_value" label="血糖值(mmol/L)" width="140">
+        <el-table-column prop="collection_time" label="采集时间" min-width="180" />
+        <el-table-column prop="blood_glucose_value" label="血糖值(mmol/L)" min-width="200">
           <template #default="{ row }">
             <el-tag
               :type="getGlucoseLevel(row.blood_glucose_value).type"
@@ -109,14 +113,14 @@
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="关联批次" width="150">
+        <el-table-column label="关联批次" min-width="150">
           <template #default="{ row }">
             <el-tag type="primary">
               {{ getBatchNumber(row.batch_id) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="关联人员" width="120">
+        <el-table-column label="关联人员" min-width="120">
           <template #default="{ row }">
             <el-tag type="success">
               {{ getPersonName(row.person_id) }}
@@ -240,7 +244,8 @@
 <script setup lang="ts">
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { TrendCharts, Plus } from '@element-plus/icons-vue'
+import { TrendCharts, Plus, Download } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -269,6 +274,7 @@ use([
 const dataStore = useDataStore()
 
 const loading = ref(false)
+const exportLoading = ref(false)
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
@@ -342,7 +348,8 @@ const filteredData = computed(() => {
     })
   }
   
-  return result.sort((a, b) => new Date(a.collection_time).getTime() - new Date(b.collection_time).getTime())
+  // 按指尖血数据ID倒序排列，最新创建的在前面
+  return result.sort((a, b) => b.finger_blood_file_id - a.finger_blood_file_id)
 })
 
 // 当前页数据
@@ -564,6 +571,64 @@ const handleDelete = async (row: FingerBloodData) => {
     ElMessage.success('删除成功')
   } catch {
     // 用户取消删除
+  }
+}
+
+// 导出数据
+const handleExport = () => {
+  try {
+    exportLoading.value = true
+    
+    // 准备导出数据，只包含时间和血糖值两列
+    const exportData = filteredData.value.map(item => ({
+      '时间': item.collection_time,
+      '血糖值': item.blood_glucose_value
+    }))
+
+    // 创建工作簿和工作表
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    
+    // 设置列宽
+    ws['!cols'] = [
+      { wch: 20 }, // 时间
+      { wch: 15 }  // 血糖值
+    ]
+    
+    // 添加工作表到工作簿
+    XLSX.utils.book_append_sheet(wb, ws, '血糖数据')
+    
+    // 生成文件名
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
+    let filename = `指尖血数据导出_${timestamp}.xlsx`
+    
+    // 根据筛选条件调整文件名
+    const filters = []
+    if (filterBatchId.value) {
+      const batch = dataStore.batches.find(b => b.batch_id === filterBatchId.value)
+      if (batch) filters.push(`批次${batch.batch_number}`)
+    }
+    if (filterPersonId.value) {
+      const person = dataStore.persons.find(p => p.person_id === filterPersonId.value)
+      if (person) filters.push(`人员${person.person_name}`)
+    }
+    if (dateRange.value && dateRange.value[0] && dateRange.value[1]) {
+      filters.push(`${dateRange.value[0].slice(0, 10)}至${dateRange.value[1].slice(0, 10)}`)
+    }
+    
+    if (filters.length > 0) {
+      filename = `指尖血数据导出_${filters.join('_')}_${timestamp}.xlsx`
+    }
+    
+    // 导出文件
+    XLSX.writeFile(wb, filename)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('Export failed:', error)
+    ElMessage.error('导出失败，请重试')
+  } finally {
+    exportLoading.value = false
   }
 }
 
