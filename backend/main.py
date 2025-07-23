@@ -6,24 +6,15 @@ import os
 
 # 导入路由
 from routers import batches, persons, experiments, competitor_files, finger_blood_data, sensors, auth
-from database import create_tables
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动时创建数据库表
-    print("正在创建数据库表...")
-    try:
-        create_tables()
-        print("数据库表创建成功")
-    except Exception as e:
-        print(f"数据库表创建失败: {e}")
-    
     # 创建上传目录
     upload_dirs = [
         "uploads/competitor_files",
     ]
     for dir_path in upload_dirs:
         os.makedirs(dir_path, exist_ok=True)
+    print("上传目录创建完成")
     
     yield
     # 关闭时的清理工作
