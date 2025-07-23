@@ -38,12 +38,12 @@ const routes: RouteRecordRaw[] = [
         name: 'Dashboard',
         component: DashboardPage,
         meta: {
-          title: '仪表盘',
+          title: '首页',
           icon: 'House'
         }
       },
       {
-        path: 'batch',
+        path: 'batches',
         name: 'BatchManagement',
         component: BatchManagement,
         meta: {
@@ -52,7 +52,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        path: 'person',
+        path: 'persons',
         name: 'PersonManagement',
         component: PersonManagement,
         meta: {
@@ -61,7 +61,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        path: 'experiment',
+        path: 'experiments',
         name: 'ExperimentManagement',
         component: ExperimentManagement,
         meta: {
@@ -88,7 +88,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        path: 'sensor',
+        path: 'sensors',
         name: 'SensorManagement',
         component: SensorManagement,
         meta: {

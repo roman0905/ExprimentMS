@@ -7,12 +7,24 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { useAuthStore } from './stores/auth'
+import { useDataStore } from './stores/data'
 
 const authStore = useAuthStore()
+const dataStore = useDataStore()
 
-// 初始化认证状态
-onMounted(() => {
+// 初始化应用
+onMounted(async () => {
+  // 初始化认证状态
   authStore.initAuth()
+  
+  // 如果已登录，初始化数据
+  if (authStore.isLoggedIn) {
+    try {
+      await dataStore.initializeData()
+    } catch (error) {
+      console.error('Failed to initialize data:', error)
+    }
+  }
 })
 </script>
 

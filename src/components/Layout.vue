@@ -32,7 +32,7 @@
             <template #title>人员管理</template>
           </el-menu-item>
           
-          <el-menu-item index="/experiment">
+          <el-menu-item index="/experiments">
             <el-icon><DataAnalysis /></el-icon>
             <template #title>实验管理</template>
           </el-menu-item>
@@ -47,7 +47,7 @@
             <template #title>指尖血数据</template>
           </el-menu-item>
           
-          <el-menu-item index="/sensor">
+          <el-menu-item index="/sensors">
             <el-icon><Monitor /></el-icon>
             <template #title>传感器管理</template>
           </el-menu-item>
