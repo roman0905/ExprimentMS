@@ -33,7 +33,7 @@
           <el-option
             v-for="person in dataStore.persons"
             :key="person.person_id"
-            :label="person.person_name"
+            :label="`${person.person_name} (ID: ${person.person_id})`"
             :value="person.person_id"
           />
         </el-select>
@@ -50,7 +50,7 @@
     <!-- 数据表格 -->
     <el-card>
       <el-table
-        :data="filteredFiles"
+        :data="paginatedFiles"
         stripe
         style="width: 100%"
         v-loading="loading"
@@ -104,6 +104,19 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页组件 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizes"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
     
     <!-- 上传对话框 -->
@@ -143,7 +156,7 @@
             <el-option
               v-for="person in dataStore.persons"
               :key="person.person_id"
-              :label="`${person.person_name} (${person.gender === 'Male' ? '男' : person.gender === 'Female' ? '女' : '其他'})`"
+              :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
@@ -222,6 +235,11 @@ const uploadFormRef = ref<FormInstance>()
 const uploadRef = ref()
 const fileList = ref<UploadFile[]>([])
 
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50, 100]
+
 const uploadForm = reactive({
   batch_id: undefined as number | undefined,
   person_id: undefined as number | undefined,
@@ -255,6 +273,16 @@ const filteredFiles = computed(() => {
   return result
 })
 
+// 当前页数据
+const paginatedFiles = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredFiles.value.slice(start, end)
+})
+
+// 总数据量
+const total = computed(() => filteredFiles.value.length)
+
 // 获取批次号
 const getBatchNumber = (batchId: number): string => {
   const batch = dataStore.batches.find(b => b.batch_id === batchId)
@@ -264,7 +292,7 @@ const getBatchNumber = (batchId: number): string => {
 // 获取人员姓名
 const getPersonName = (personId: number): string => {
   const person = dataStore.persons.find(p => p.person_id === personId)
-  return person?.person_name || '未知人员'
+  return person ? `${person.person_name} (ID: ${person.person_id})` : '未知人员'
 }
 
 // 从文件路径获取文件名
@@ -286,9 +314,25 @@ const getFileSize = (filePath: string): string => {
   return sizes[Math.abs(hash) % sizes.length]
 }
 
+// 分页事件处理
+const handleSizeChange = (val: number) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val
+}
+
+// 重置分页到第一页
+const resetPagination = () => {
+  currentPage.value = 1
+}
+
 // 筛选处理
 const handleFilter = () => {
   // 筛选逻辑已在computed中处理
+  resetPagination()
 }
 
 // 上传文件
@@ -432,6 +476,13 @@ const resetUploadForm = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 .file-name {

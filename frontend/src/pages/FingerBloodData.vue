@@ -33,7 +33,7 @@
           <el-option
             v-for="person in dataStore.persons"
             :key="person.person_id"
-            :label="person.person_name"
+            :label="`${person.person_name} (ID: ${person.person_id})`"
             :value="person.person_id"
           />
         </el-select>
@@ -89,7 +89,7 @@
       </template>
       
       <el-table
-        :data="filteredData"
+        :data="paginatedData"
         stripe
         style="width: 100%"
         v-loading="loading"
@@ -142,6 +142,19 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页组件 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizes"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
     
     <!-- 新建/编辑对话框 -->
@@ -181,7 +194,7 @@
             <el-option
               v-for="person in dataStore.persons"
               :key="person.person_id"
-              :label="`${person.person_name} (${person.gender === 'Male' ? '男' : person.gender === 'Female' ? '女' : '其他'})`"
+              :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
@@ -279,6 +292,11 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
 
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50, 100]
+
 const form = reactive({
   finger_blood_file_id: 0,
   batch_id: undefined as number | undefined,
@@ -326,6 +344,16 @@ const filteredData = computed(() => {
   
   return result.sort((a, b) => new Date(a.collection_time).getTime() - new Date(b.collection_time).getTime())
 })
+
+// 当前页数据
+const paginatedData = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredData.value.slice(start, end)
+})
+
+// 总数据量
+const total = computed(() => filteredData.value.length)
 
 // 图表配置
 const chartOption = computed(() => {
@@ -476,12 +504,28 @@ const getBatchNumber = (batchId: number): string => {
 // 获取人员姓名
 const getPersonName = (personId: number): string => {
   const person = dataStore.persons.find(p => p.person_id === personId)
-  return person?.person_name || '未知人员'
+  return person ? `${person.person_name} (ID: ${person.person_id})` : '未知人员'
+}
+
+// 分页事件处理
+const handleSizeChange = (val: number) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val
+}
+
+// 重置分页到第一页
+const resetPagination = () => {
+  currentPage.value = 1
 }
 
 // 筛选处理
 const handleFilter = () => {
   // 筛选逻辑已在computed中处理
+  resetPagination()
 }
 
 // 切换图表显示
@@ -625,6 +669,13 @@ watch([filterBatchId, filterPersonId, dateRange], () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 .chart-card {

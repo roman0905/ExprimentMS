@@ -40,6 +40,10 @@
       </div>
       
       <div class="toolbar-right">
+        <el-button @click="handleExport">
+          <el-icon><Download /></el-icon>
+          导出数据
+        </el-button>
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新建实验
@@ -50,7 +54,7 @@
     <!-- 数据表格 -->
     <el-card>
       <el-table
-        :data="filteredExperiments"
+        :data="paginatedExperiments"
         stripe
         style="width: 100%"
         v-loading="loading"
@@ -96,6 +100,19 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页组件 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizes"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
     
     <!-- 新建/编辑对话框 -->
@@ -135,7 +152,7 @@
             <el-option
               v-for="person in dataStore.persons"
               :key="person.person_id"
-              :label="`${person.person_name} (${person.gender === 'Male' ? '男' : person.gender === 'Female' ? '女' : '其他'}, ${person.age || '未知'}岁)`"
+              :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
@@ -164,7 +181,8 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, Download } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { useDataStore, type Experiment } from '../stores/data'
 import { ApiService } from '../services/api'
 
@@ -190,6 +208,11 @@ const filterPersonId = ref<number | undefined>()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50, 100]
 
 const form = reactive({
   experiment_id: 0,
@@ -226,6 +249,16 @@ const filteredExperiments = computed(() => {
   return result
 })
 
+// 当前页数据
+const paginatedExperiments = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredExperiments.value.slice(start, end)
+})
+
+// 总数据量
+const total = computed(() => filteredExperiments.value.length)
+
 // 获取批次号
 const getBatchNumber = (batchId: number): string => {
   const batch = dataStore.batches.find(b => b.batch_id === batchId)
@@ -238,9 +271,66 @@ const getPersonName = (personId: number): string => {
   return person?.person_name || '未知人员'
 }
 
+// 分页事件处理
+const handleSizeChange = (val: number) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val
+}
+
+// 重置分页到第一页
+const resetPagination = () => {
+  currentPage.value = 1
+}
+
 // 筛选处理
 const handleFilter = () => {
   // 筛选逻辑已在computed中处理
+  resetPagination()
+}
+
+// 导出数据
+const handleExport = () => {
+  try {
+    // 准备导出数据
+    const exportData = filteredExperiments.value.map(experiment => ({
+      '实验ID': experiment.experiment_id,
+      '批次号': getBatchNumber(experiment.batch_id),
+      '人员姓名': getPersonName(experiment.person_id),
+      '实验内容': experiment.experiment_content || '暂无描述'
+    }))
+    
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 10 }, // 实验ID
+      { wch: 15 }, // 批次号
+      { wch: 15 }, // 人员姓名
+      { wch: 50 }  // 实验内容
+    ]
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, '实验数据')
+    
+    // 生成文件名
+    const now = new Date()
+    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
+    const filename = `实验数据_${timestamp}.xlsx`
+    
+    // 导出文件
+    XLSX.writeFile(wb, filename)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('Export failed:', error)
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 // 新建实验
@@ -365,6 +455,13 @@ const resetForm = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 .content-cell {

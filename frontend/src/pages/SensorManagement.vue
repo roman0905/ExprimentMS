@@ -10,7 +10,7 @@
       <div class="toolbar-left">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索传感器名称或型号"
+          placeholder="搜索传感器名称"
           style="width: 250px; margin-right: 12px"
           clearable
           @input="handleSearch"
@@ -21,19 +21,18 @@
         </el-input>
         
         <el-select
-          v-model="filterType"
-          placeholder="筛选类型"
+          v-model="filterBatch"
+          placeholder="筛选批次"
           clearable
-          style="width: 150px; margin-right: 12px"
+          style="width: 200px; margin-right: 12px"
           @change="handleFilter"
         >
-          <el-option label="温度传感器" value="Temperature" />
-          <el-option label="湿度传感器" value="Humidity" />
-          <el-option label="压力传感器" value="Pressure" />
-          <el-option label="光照传感器" value="Light" />
-          <el-option label="运动传感器" value="Motion" />
-          <el-option label="心率传感器" value="HeartRate" />
-          <el-option label="其他" value="Other" />
+          <el-option
+            v-for="batch in batches"
+            :key="batch.batch_id"
+            :label="batch.batch_number"
+            :value="batch.batch_id.toString()"
+          />
         </el-select>
         
         <el-select
@@ -43,10 +42,8 @@
           style="width: 120px"
           @change="handleFilter"
         >
-          <el-option label="正常" value="Normal" />
-          <el-option label="维护中" value="Maintenance" />
-          <el-option label="故障" value="Fault" />
-          <el-option label="停用" value="Disabled" />
+          <el-option label="进行中" value="running" />
+          <el-option label="已结束" value="finished" />
         </el-select>
       </div>
       
@@ -76,30 +73,20 @@
       
       <el-card class="stat-card">
         <div class="stat-content">
-          <div class="stat-number">{{ normalSensors }}</div>
-          <div class="stat-label">正常运行</div>
+          <div class="stat-number">{{ runningSensors }}</div>
+          <div class="stat-label">进行中</div>
         </div>
-        <div class="stat-icon normal">
+        <div class="stat-icon running">
           <el-icon><CircleCheck /></el-icon>
         </div>
       </el-card>
       
       <el-card class="stat-card">
         <div class="stat-content">
-          <div class="stat-number">{{ maintenanceSensors }}</div>
-          <div class="stat-label">维护中</div>
+          <div class="stat-number">{{ finishedSensors }}</div>
+          <div class="stat-label">已结束</div>
         </div>
-        <div class="stat-icon maintenance">
-          <el-icon><Tools /></el-icon>
-        </div>
-      </el-card>
-      
-      <el-card class="stat-card">
-        <div class="stat-content">
-          <div class="stat-number">{{ faultSensors }}</div>
-          <div class="stat-label">故障设备</div>
-        </div>
-        <div class="stat-icon fault">
+        <div class="stat-icon finished">
           <el-icon><CircleClose /></el-icon>
         </div>
       </el-card>
@@ -115,33 +102,38 @@
       </template>
       
       <el-table
-        :data="filteredSensors"
+        :data="paginatedSensors"
         stripe
         style="width: 100%"
         v-loading="loading"
       >
         <el-table-column prop="sensor_id" label="传感器ID" width="100" />
-        <el-table-column prop="sensor_name" label="传感器名称" width="180" />
-        <el-table-column prop="sensor_type" label="类型" width="120">
+        <el-table-column prop="sensor_name" label="传感器名称" width="200" />
+        <el-table-column label="关联人员" width="150">
           <template #default="{ row }">
-            <el-tag :type="getSensorTypeColor(row.sensor_type)">
-              {{ getSensorTypeLabel(row.sensor_type) }}
-            </el-tag>
+          <el-tag type="success">
+            {{ getPersonName(row.person_id) }}
+          </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="model" label="型号" width="150" />
-        <el-table-column prop="manufacturer" label="制造商" width="120" />
-        <el-table-column prop="installation_date" label="安装日期" width="120" />
-        <el-table-column prop="last_maintenance" label="最后维护" width="120" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column label="关联批次" width="150">
           <template #default="{ row }">
-            <el-tag :type="getStatusColor(row.status)">
-              {{ getStatusLabel(row.status) }}
-            </el-tag>
+           <el-tag type="primary">
+            {{ getBatchNumber(row.batch_id) }}
+           </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="location" label="位置" width="150" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column prop="start_time" label="开始时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.start_time) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="end_time" label="结束时间" width="180">
+          <template #default="{ row }">
+            {{ row.end_time ? formatDateTime(row.end_time) : '进行中' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
               type="primary"
@@ -149,14 +141,6 @@
               @click="handleEdit(row)"
             >
               编辑
-            </el-button>
-            <el-button
-              type="warning"
-              size="small"
-              @click="handleMaintenance(row)"
-              :disabled="row.status === 'Maintenance'"
-            >
-              维护
             </el-button>
             <el-button
               type="danger"
@@ -168,6 +152,19 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页组件 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizes"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
     
     <!-- 新建/编辑对话框 -->
@@ -193,19 +190,19 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="传感器类型" prop="sensor_type">
+            <el-form-item label="关联人员" prop="person_id">
               <el-select
-                v-model="form.sensor_type"
-                placeholder="请选择类型"
+                v-model="form.person_id"
+                placeholder="请选择人员"
                 style="width: 100%"
+                filterable
               >
-                <el-option label="温度传感器" value="Temperature" />
-                <el-option label="湿度传感器" value="Humidity" />
-                <el-option label="压力传感器" value="Pressure" />
-                <el-option label="光照传感器" value="Light" />
-                <el-option label="运动传感器" value="Motion" />
-                <el-option label="心率传感器" value="HeartRate" />
-                <el-option label="其他" value="Other" />
+                <el-option
+                  v-for="person in persons"
+                  :key="person.person_id"
+                  :label="`${person.person_name} (ID: ${person.person_id})`"
+                  :value="person.person_id"
+                />
               </el-select>
             </el-form-item>
           </el-col>
@@ -213,65 +210,44 @@
         
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="型号" prop="model">
-              <el-input
-                v-model="form.model"
-                placeholder="请输入型号"
-              />
+            <el-form-item label="关联批次" prop="batch_id">
+              <el-select
+                v-model="form.batch_id"
+                placeholder="请选择批次"
+                style="width: 100%"
+                filterable
+              >
+                <el-option
+                  v-for="batch in batches"
+                  :key="batch.batch_id"
+                  :label="`${batch.batch_number} (ID: ${batch.batch_id})`"
+                  :value="batch.batch_id"
+                />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="制造商" prop="manufacturer">
-              <el-input
-                v-model="form.manufacturer"
-                placeholder="请输入制造商"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="安装日期" prop="installation_date">
+            <el-form-item label="开始时间" prop="start_time">
               <el-date-picker
-                v-model="form.installation_date"
-                type="date"
-                placeholder="选择安装日期"
+                v-model="form.start_time"
+                type="datetime"
+                placeholder="选择开始时间"
                 style="width: 100%"
-                format="YYYY-MM-DD"
-                value-format="YYYY-MM-DD"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
               />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="状态" prop="status">
-              <el-select
-                v-model="form.status"
-                placeholder="请选择状态"
-                style="width: 100%"
-              >
-                <el-option label="正常" value="Normal" />
-                <el-option label="维护中" value="Maintenance" />
-                <el-option label="故障" value="Fault" />
-                <el-option label="停用" value="Disabled" />
-              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
         
-        <el-form-item label="位置" prop="location">
-          <el-input
-            v-model="form.location"
-            placeholder="请输入传感器位置"
-          />
-        </el-form-item>
-        
-        <el-form-item label="描述">
-          <el-input
-            v-model="form.description"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入传感器描述信息"
+        <el-form-item label="结束时间">
+          <el-date-picker
+            v-model="form.end_time"
+            type="datetime"
+            placeholder="选择结束时间（可选）"
+            style="width: 100%"
+            format="YYYY-MM-DD HH:mm:ss"
+            value-format="YYYY-MM-DD HH:mm:ss"
           />
         </el-form-item>
       </el-form>
@@ -284,59 +260,7 @@
       </template>
     </el-dialog>
     
-    <!-- 维护记录对话框 -->
-    <el-dialog
-      v-model="maintenanceDialogVisible"
-      title="传感器维护"
-      width="500px"
-    >
-      <el-form
-        ref="maintenanceFormRef"
-        :model="maintenanceForm"
-        :rules="maintenanceRules"
-        label-width="120px"
-      >
-        <el-form-item label="维护类型" prop="maintenance_type">
-          <el-select
-            v-model="maintenanceForm.maintenance_type"
-            placeholder="请选择维护类型"
-            style="width: 100%"
-          >
-            <el-option label="定期保养" value="Regular" />
-            <el-option label="故障维修" value="Repair" />
-            <el-option label="校准调试" value="Calibration" />
-            <el-option label="清洁保养" value="Cleaning" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="维护日期" prop="maintenance_date">
-          <el-date-picker
-            v-model="maintenanceForm.maintenance_date"
-            type="date"
-            placeholder="选择维护日期"
-            style="width: 100%"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-          />
-        </el-form-item>
-        
-        <el-form-item label="维护说明" prop="maintenance_notes">
-          <el-input
-            v-model="maintenanceForm.maintenance_notes"
-            type="textarea"
-            :rows="4"
-            placeholder="请输入维护说明"
-          />
-        </el-form-item>
-      </el-form>
-      
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="maintenanceDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="handleMaintenanceSubmit">确定</el-button>
-        </span>
-      </template>
-    </el-dialog>
+
   </div>
 </template>
 
@@ -349,23 +273,33 @@ import {
   Plus,
   Monitor,
   CircleCheck,
-  Tools,
   CircleClose
 } from '@element-plus/icons-vue'
-import { useDataStore, type Sensor } from '../stores/data'
+import * as XLSX from 'xlsx'
+import { useDataStore, type Sensor, type Person, type Batch } from '../stores/data'
 import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+
+// 人员和批次数据
+const persons = ref<Person[]>([])
+const batches = ref<Batch[]>([])
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
   try {
     loading.value = true
-    const sensorsData = await ApiService.getSensors()
+    const [sensorsData, personsData, batchesData] = await Promise.all([
+      ApiService.getSensors(),
+      ApiService.getPersons(),
+      ApiService.getBatches()
+    ])
     dataStore.sensors = sensorsData
+    persons.value = personsData
+    batches.value = batchesData
   } catch (error) {
-    console.error('Failed to load sensors:', error)
-    ElMessage.error('加载传感器数据失败')
+    console.error('Failed to load data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
@@ -373,69 +307,43 @@ onMounted(async () => {
 
 const loading = ref(false)
 const searchKeyword = ref('')
-const filterType = ref('')
+const filterBatch = ref('')
 const filterStatus = ref('')
 const dialogVisible = ref(false)
-const maintenanceDialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
-const maintenanceFormRef = ref<FormInstance>()
 const currentSensor = ref<Sensor | null>(null)
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50, 100]
 
 const form = reactive({
   sensor_id: 0,
   sensor_name: '',
-  sensor_type: '',
-  model: '',
-  manufacturer: '',
-  installation_date: '',
-  last_maintenance: '',
-  status: 'Normal',
-  location: '',
-  description: ''
-})
-
-const maintenanceForm = reactive({
-  maintenance_type: '',
-  maintenance_date: '',
-  maintenance_notes: ''
+  person_id: null,
+  batch_id: null,
+  start_time: '',
+  end_time: ''
 })
 
 const rules = {
   sensor_name: [
     { required: true, message: '请输入传感器名称', trigger: 'blur' }
   ],
-  sensor_type: [
-    { required: true, message: '请选择传感器类型', trigger: 'change' }
+  person_id: [
+    { required: true, message: '请选择关联人员', trigger: 'change' }
   ],
-  model: [
-    { required: true, message: '请输入型号', trigger: 'blur' }
+  batch_id: [
+    { required: true, message: '请选择关联批次', trigger: 'change' }
   ],
-  manufacturer: [
-    { required: true, message: '请输入制造商', trigger: 'blur' }
-  ],
-  installation_date: [
-    { required: true, message: '请选择安装日期', trigger: 'change' }
-  ],
-  status: [
-    { required: true, message: '请选择状态', trigger: 'change' }
-  ],
-  location: [
-    { required: true, message: '请输入位置', trigger: 'blur' }
+  start_time: [
+    { required: true, message: '请选择开始时间', trigger: 'change' }
   ]
 }
 
-const maintenanceRules = {
-  maintenance_type: [
-    { required: true, message: '请选择维护类型', trigger: 'change' }
-  ],
-  maintenance_date: [
-    { required: true, message: '请选择维护日期', trigger: 'change' }
-  ],
-  maintenance_notes: [
-    { required: true, message: '请输入维护说明', trigger: 'blur' }
-  ]
-}
+
 
 // 过滤后的传感器列表
 const filteredSensors = computed(() => {
@@ -444,91 +352,135 @@ const filteredSensors = computed(() => {
   if (searchKeyword.value) {
     const keyword = searchKeyword.value.toLowerCase()
     result = result.filter(sensor => 
-      sensor.sensor_name.toLowerCase().includes(keyword) ||
-      sensor.model.toLowerCase().includes(keyword)
+      sensor.sensor_name.toLowerCase().includes(keyword)
     )
   }
   
-  if (filterType.value) {
-    result = result.filter(sensor => sensor.sensor_type === filterType.value)
+  if (filterBatch.value) {
+    result = result.filter(sensor => sensor.batch_id.toString() === filterBatch.value)
   }
   
   if (filterStatus.value) {
-    result = result.filter(sensor => sensor.status === filterStatus.value)
+    if (filterStatus.value === 'running') {
+      result = result.filter(sensor => !sensor.end_time)
+    } else if (filterStatus.value === 'finished') {
+      result = result.filter(sensor => sensor.end_time)
+    }
   }
   
   return result
 })
 
+// 当前页数据
+const paginatedSensors = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredSensors.value.slice(start, end)
+})
+
+// 总数据量
+const total = computed(() => filteredSensors.value.length)
+
 // 统计数据
 const totalSensors = computed(() => dataStore.sensors.length)
-const normalSensors = computed(() => dataStore.sensors.filter(s => s.status === 'Normal').length)
-const maintenanceSensors = computed(() => dataStore.sensors.filter(s => s.status === 'Maintenance').length)
-const faultSensors = computed(() => dataStore.sensors.filter(s => s.status === 'Fault').length)
+const runningSensors = computed(() => dataStore.sensors.filter(s => !s.end_time).length)
+const finishedSensors = computed(() => dataStore.sensors.filter(s => s.end_time).length)
 
-// 获取传感器类型颜色
-const getSensorTypeColor = (type: string) => {
-  const colors: Record<string, string> = {
-    Temperature: 'danger',
-    Humidity: 'primary',
-    Pressure: 'warning',
-    Light: 'success',
-    Motion: 'info',
-    HeartRate: 'danger',
-    Other: ''
-  }
-  return colors[type] || ''
+// 格式化日期时间
+const formatDateTime = (dateTime: string) => {
+  if (!dateTime) return ''
+  return new Date(dateTime).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  })
 }
 
-// 获取传感器类型标签
-const getSensorTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    Temperature: '温度传感器',
-    Humidity: '湿度传感器',
-    Pressure: '压力传感器',
-    Light: '光照传感器',
-    Motion: '运动传感器',
-    HeartRate: '心率传感器',
-    Other: '其他'
-  }
-  return labels[type] || type
+// 获取人员姓名
+const getPersonName = (personId: number) => {
+  const person = persons.value.find(p => p.person_id === personId)
+  return person ? `${person.person_name} (ID: ${person.person_id})` : `ID: ${personId}`
 }
 
-// 获取状态颜色
-const getStatusColor = (status: string) => {
-  const colors: Record<string, string> = {
-    Normal: 'success',
-    Maintenance: 'warning',
-    Fault: 'danger',
-    Disabled: 'info'
-  }
-  return colors[status] || ''
+// 获取批次号
+const getBatchNumber = (batchId: number) => {
+  const batch = batches.value.find(b => b.batch_id === batchId)
+  return batch ? batch.batch_number : `ID: ${batchId}`
 }
 
-// 获取状态标签
-const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    Normal: '正常',
-    Maintenance: '维护中',
-    Fault: '故障',
-    Disabled: '停用'
-  }
-  return labels[status] || status
+// 分页事件处理
+const handleSizeChange = (val: number) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val
+}
+
+// 重置分页到第一页（搜索或筛选时使用）
+const resetPagination = () => {
+  currentPage.value = 1
 }
 
 // 搜索处理
 const handleSearch = () => {
   // 搜索逻辑已在computed中处理
+  resetPagination()
 }
 
 // 筛选处理
 const handleFilter = () => {
   // 筛选逻辑已在computed中处理
+  resetPagination()
 }
 
 // 导出数据
 const handleExport = () => {
-  ElMessage.info('导出功能开发中...')
+  try {
+    // 准备导出数据
+    const exportData = filteredSensors.value.map(sensor => ({
+      '传感器ID': sensor.sensor_id,
+      '传感器名称': sensor.sensor_name,
+      '关联人员': getPersonName(sensor.person_id),
+      '关联批次': getBatchNumber(sensor.batch_id),
+      '开始时间': formatDateTime(sensor.start_time),
+      '结束时间': formatDateTime(sensor.end_time)
+    }))
+    
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 12 }, // 传感器ID
+      { wch: 20 }, // 传感器名称
+      { wch: 20 }, // 关联人员
+      { wch: 15 }, // 关联批次
+      { wch: 20 }, // 开始时间
+      { wch: 20 }  // 结束时间
+    ]
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, '传感器数据')
+    
+    // 生成文件名
+    const now = new Date()
+    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
+    const filename = `传感器数据_${timestamp}.xlsx`
+    
+    // 导出文件
+    XLSX.writeFile(wb, filename)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('Export failed:', error)
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 // 新建传感器
@@ -545,12 +497,7 @@ const handleEdit = (row: Sensor) => {
   Object.assign(form, row)
 }
 
-// 维护传感器
-const handleMaintenance = (row: Sensor) => {
-  currentSensor.value = row
-  maintenanceDialogVisible.value = true
-  resetMaintenanceForm()
-}
+
 
 // 删除传感器
 const handleDelete = async (row: Sensor) => {
@@ -582,54 +529,26 @@ const handleSubmit = async () => {
         // 编辑
         dataStore.updateSensor(form.sensor_id, {
           sensor_name: form.sensor_name,
-          sensor_type: form.sensor_type,
-          model: form.model,
-          manufacturer: form.manufacturer,
-          installation_date: form.installation_date,
-          last_maintenance: form.last_maintenance,
-          status: form.status,
-          location: form.location,
-          description: form.description
+          person_id: form.person_id,
+          batch_id: form.batch_id,
+          start_time: form.start_time,
+          end_time: form.end_time
         })
         ElMessage.success('更新成功')
       } else {
         // 新建
         dataStore.addSensor({
           sensor_name: form.sensor_name,
-          sensor_type: form.sensor_type,
-          model: form.model,
-          manufacturer: form.manufacturer,
-          installation_date: form.installation_date,
-          last_maintenance: '',
-          status: form.status,
-          location: form.location,
-          description: form.description
+          person_id: form.person_id,
+          batch_id: form.batch_id,
+          start_time: form.start_time,
+          end_time: form.end_time
         })
         ElMessage.success('添加成功')
       }
       
       dialogVisible.value = false
       resetForm()
-    }
-  })
-}
-
-// 提交维护表单
-const handleMaintenanceSubmit = async () => {
-  if (!maintenanceFormRef.value || !currentSensor.value) return
-  
-  await maintenanceFormRef.value.validate((valid) => {
-    if (valid) {
-      // 更新传感器的最后维护时间和状态
-      dataStore.updateSensor(currentSensor.value!.sensor_id, {
-        ...currentSensor.value!,
-        last_maintenance: maintenanceForm.maintenance_date,
-        status: 'Normal' // 维护后状态设为正常
-      })
-      
-      ElMessage.success('维护记录已保存')
-      maintenanceDialogVisible.value = false
-      resetMaintenanceForm()
     }
   })
 }
@@ -642,26 +561,10 @@ const resetForm = () => {
   Object.assign(form, {
     sensor_id: 0,
     sensor_name: '',
-    sensor_type: '',
-    model: '',
-    manufacturer: '',
-    installation_date: '',
-    last_maintenance: '',
-    status: 'Normal',
-    location: '',
-    description: ''
-  })
-}
-
-// 重置维护表单
-const resetMaintenanceForm = () => {
-  if (maintenanceFormRef.value) {
-    maintenanceFormRef.value.resetFields()
-  }
-  Object.assign(maintenanceForm, {
-    maintenance_type: '',
-    maintenance_date: '',
-    maintenance_notes: ''
+    person_id: null,
+    batch_id: null,
+    start_time: '',
+    end_time: ''
   })
 }
 </script>
@@ -765,15 +668,11 @@ const resetMaintenanceForm = () => {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
-.stat-icon.normal {
+.stat-icon.running {
   background: linear-gradient(135deg, #67C23A 0%, #85ce61 100%);
 }
 
-.stat-icon.maintenance {
-  background: linear-gradient(135deg, #E6A23C 0%, #f0c78a 100%);
-}
-
-.stat-icon.fault {
+.stat-icon.finished {
   background: linear-gradient(135deg, #F56C6C 0%, #f89898 100%);
 }
 
@@ -790,6 +689,13 @@ const resetMaintenanceForm = () => {
   font-size: 14px;
   color: #909399;
   font-weight: normal;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 .dialog-footer {

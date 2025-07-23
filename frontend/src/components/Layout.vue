@@ -215,6 +215,8 @@ onMounted(() => {
 .main-content {
   background: #f0f2f5;
   padding: 20px;
+  min-height: calc(100vh - 60px);
+  overflow-y: auto;
 }
 
 :deep(.el-menu) {

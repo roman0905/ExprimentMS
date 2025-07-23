@@ -22,6 +22,10 @@
       </div>
       
       <div class="toolbar-right">
+        <el-button @click="handleExport">
+          <el-icon><Download /></el-icon>
+          导出数据
+        </el-button>
         <el-button type="primary" @click="handleAdd">
           <el-icon><Plus /></el-icon>
           新建人员
@@ -32,13 +36,19 @@
     <!-- 数据表格 -->
     <el-card>
       <el-table
-        :data="filteredPersons"
+        :data="paginatedPersons"
         stripe
         style="width: 100%"
         v-loading="loading"
       >
         <el-table-column prop="person_id" label="人员ID" width="100" />
-        <el-table-column prop="person_name" label="姓名" width="120" />
+        <el-table-column prop="person_name" label="姓名" width="120">
+          <template #default="{ row }">
+            <el-tag type="success" size="small">
+              {{ row.person_name }}
+            </el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="gender" label="性别" width="80">
           <template #default="{ row }">
             <el-tag
@@ -88,6 +98,19 @@
           </template>
         </el-table-column>
       </el-table>
+      
+      <!-- 分页组件 -->
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="pageSizes"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+        />
+      </div>
     </el-card>
     
     <!-- 新建/编辑对话框 -->
@@ -164,7 +187,8 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, Download } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import { useDataStore, type Person } from '../stores/data'
 import { ApiService } from '../services/api'
 
@@ -189,6 +213,11 @@ const searchText = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
+
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = [10, 20, 50, 100]
 
 const form = reactive({
   person_id: 0,
@@ -225,6 +254,16 @@ const filteredPersons = computed(() => {
   )
 })
 
+// 当前页数据
+const paginatedPersons = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return filteredPersons.value.slice(start, end)
+})
+
+// 总数据量
+const total = computed(() => filteredPersons.value.length)
+
 // 计算BMI
 const calculateBMI = (height?: number, weight?: number): string => {
   if (!height || !weight) return '-'
@@ -233,9 +272,72 @@ const calculateBMI = (height?: number, weight?: number): string => {
   return bmi.toFixed(1)
 }
 
+// 分页事件处理
+const handleSizeChange = (val: number) => {
+  pageSize.value = val
+  currentPage.value = 1
+}
+
+const handleCurrentChange = (val: number) => {
+  currentPage.value = val
+}
+
+// 重置分页到第一页
+const resetPagination = () => {
+  currentPage.value = 1
+}
+
 // 搜索处理
 const handleSearch = () => {
   // 搜索逻辑已在computed中处理
+  resetPagination()
+}
+
+// 导出数据
+const handleExport = () => {
+  try {
+    // 准备导出数据
+    const exportData = filteredPersons.value.map(person => ({
+      '人员ID': person.person_id,
+      '姓名': person.person_name,
+      '性别': genderMap[person.gender] || '未知',
+      '年龄': person.age || '-',
+      '身高(cm)': person.height_cm || '-',
+      '体重(kg)': person.weight_kg || '-',
+      'BMI': calculateBMI(person.height_cm, person.weight_kg)
+    }))
+    
+    // 创建工作簿
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(exportData)
+    
+    // 设置列宽
+    const colWidths = [
+      { wch: 10 }, // 人员ID
+      { wch: 15 }, // 姓名
+      { wch: 8 },  // 性别
+      { wch: 8 },  // 年龄
+      { wch: 12 }, // 身高
+      { wch: 12 }, // 体重
+      { wch: 8 }   // BMI
+    ]
+    ws['!cols'] = colWidths
+    
+    XLSX.utils.book_append_sheet(wb, ws, '人员数据')
+    
+    // 生成文件名
+    const now = new Date()
+    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
+    const filename = `人员数据_${timestamp}.xlsx`
+    
+    // 导出文件
+    XLSX.writeFile(wb, filename)
+    
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('Export failed:', error)
+    ElMessage.error('导出失败，请重试')
+  }
 }
 
 // 新建人员
@@ -366,6 +468,13 @@ const resetForm = () => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.pagination-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 
 .dialog-footer {
