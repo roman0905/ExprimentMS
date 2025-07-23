@@ -128,12 +128,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Plus } from '@element-plus/icons-vue'
 import { useDataStore, type Batch } from '../stores/data'
+import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+
+// 组件挂载时获取最新数据
+onMounted(async () => {
+  try {
+    loading.value = true
+    const batchesData = await ApiService.getBatches()
+    dataStore.batches = batchesData
+  } catch (error) {
+    console.error('Failed to load batches:', error)
+    ElMessage.error('加载批次数据失败')
+  } finally {
+    loading.value = false
+  }
+})
 
 const loading = ref(false)
 const searchText = ref('')

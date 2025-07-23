@@ -225,7 +225,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { TrendCharts, Plus } from '@element-plus/icons-vue'
 import VChart from 'vue-echarts'
@@ -240,6 +240,7 @@ import {
   DataZoomComponent
 } from 'echarts/components'
 import { useDataStore, type FingerBloodData } from '../stores/data'
+import { ApiService } from '../services/api'
 
 // 注册ECharts组件
 use([
@@ -255,6 +256,20 @@ use([
 const dataStore = useDataStore()
 
 const loading = ref(false)
+
+// 组件挂载时获取最新数据
+onMounted(async () => {
+  try {
+    loading.value = true
+    const fingerBloodDataData = await ApiService.getFingerBloodData()
+    dataStore.fingerBloodData = fingerBloodDataData
+  } catch (error) {
+    console.error('Failed to load finger blood data:', error)
+    ElMessage.error('加载血糖数据失败')
+  } finally {
+    loading.value = false
+  }
+})
 const chartLoading = ref(false)
 const showChart = ref(true)
 const filterBatchId = ref<number | undefined>()

@@ -56,11 +56,11 @@
         v-loading="loading"
       >
         <el-table-column prop="competitor_file_id" label="文件ID" width="100" />
-        <el-table-column prop="file_name" label="文件名" min-width="200">
+        <el-table-column prop="file_path" label="文件路径" min-width="200">
           <template #default="{ row }">
             <div class="file-name">
               <el-icon class="file-icon"><Document /></el-icon>
-              {{ row.file_name }}
+              {{ getFileName(row.file_path) }}
             </div>
           </template>
         </el-table-column>
@@ -80,12 +80,7 @@
         </el-table-column>
         <el-table-column label="文件大小" width="100">
           <template #default="{ row }">
-            {{ getFileSize(row.file_name) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="上传时间" width="180">
-          <template #default="{ row }">
-            {{ getUploadTime(row.competitor_file_id) }}
+            {{ getFileSize(row.file_path) }}
           </template>
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
@@ -190,7 +185,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type UploadFile } from 'element-plus'
 import {
   Upload,
@@ -200,8 +195,23 @@ import {
   UploadFilled
 } from '@element-plus/icons-vue'
 import { useDataStore, type CompetitorFile } from '../stores/data'
+import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+
+// 组件挂载时获取最新数据
+onMounted(async () => {
+  try {
+    loading.value = true
+    const competitorFilesData = await ApiService.getCompetitorFiles()
+    dataStore.competitorFiles = competitorFilesData
+  } catch (error) {
+    console.error('Failed to load competitor files:', error)
+    ElMessage.error('加载竞品文件数据失败')
+  } finally {
+    loading.value = false
+  }
+})
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -257,23 +267,23 @@ const getPersonName = (personId: number): string => {
   return person?.person_name || '未知人员'
 }
 
+// 从文件路径获取文件名
+const getFileName = (filePath: string): string => {
+  if (!filePath) return '未知文件'
+  const parts = filePath.split(/[\/\\]/)
+  return parts[parts.length - 1] || '未知文件'
+}
+
 // 模拟获取文件大小
-const getFileSize = (fileName: string): string => {
+const getFileSize = (filePath: string): string => {
   // 模拟文件大小
   const sizes = ['1.2MB', '856KB', '2.1MB', '654KB', '3.4MB']
+  const fileName = getFileName(filePath)
   const hash = fileName.split('').reduce((a, b) => {
     a = ((a << 5) - a) + b.charCodeAt(0)
     return a & a
   }, 0)
   return sizes[Math.abs(hash) % sizes.length]
-}
-
-// 模拟获取上传时间
-const getUploadTime = (fileId: number): string => {
-  // 模拟上传时间
-  const baseTime = new Date('2024-01-01 10:00:00').getTime()
-  const uploadTime = new Date(baseTime + fileId * 3600000)
-  return uploadTime.toLocaleString('zh-CN')
 }
 
 // 筛选处理
@@ -316,7 +326,7 @@ const handleSubmitUpload = async () => {
         dataStore.addCompetitorFile({
           batch_id: uploadForm.batch_id!,
           person_id: uploadForm.person_id!,
-          file_name: uploadForm.file!.name
+          file_path: uploadForm.file!.name
         })
         
         ElMessage.success('文件上传成功')
@@ -331,7 +341,8 @@ const handleSubmitUpload = async () => {
 // 下载文件
 const handleDownload = (row: CompetitorFile) => {
   // 模拟文件下载
-  ElMessage.info(`正在下载文件: ${row.file_name}`)
+  const fileName = getFileName(row.file_path)
+  ElMessage.info(`正在下载文件: ${fileName}`)
   
   // 实际项目中这里应该调用下载API
   setTimeout(() => {
@@ -342,8 +353,9 @@ const handleDownload = (row: CompetitorFile) => {
 // 删除文件
 const handleDelete = async (row: CompetitorFile) => {
   try {
+    const fileName = getFileName(row.file_path)
     await ElMessageBox.confirm(
-      `确定要删除文件 "${row.file_name}" 吗？删除后无法恢复。`,
+      `确定要删除文件 "${fileName}" 吗？删除后无法恢复。`,
       '删除确认',
       {
         confirmButtonText: '确定',

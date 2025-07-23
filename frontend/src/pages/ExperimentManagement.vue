@@ -162,12 +162,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Search, Plus } from '@element-plus/icons-vue'
 import { useDataStore, type Experiment } from '../stores/data'
+import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+
+// 组件挂载时获取最新数据
+onMounted(async () => {
+  try {
+    loading.value = true
+    const experimentsData = await ApiService.getExperiments()
+    dataStore.experiments = experimentsData
+  } catch (error) {
+    console.error('Failed to load experiments:', error)
+    ElMessage.error('加载实验数据失败')
+  } finally {
+    loading.value = false
+  }
+})
 
 const loading = ref(false)
 const filterBatchId = ref<number | undefined>()

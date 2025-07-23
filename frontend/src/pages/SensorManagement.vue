@@ -341,7 +341,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
   Search,
@@ -353,8 +353,23 @@ import {
   CircleClose
 } from '@element-plus/icons-vue'
 import { useDataStore, type Sensor } from '../stores/data'
+import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+
+// 组件挂载时获取最新数据
+onMounted(async () => {
+  try {
+    loading.value = true
+    const sensorsData = await ApiService.getSensors()
+    dataStore.sensors = sensorsData
+  } catch (error) {
+    console.error('Failed to load sensors:', error)
+    ElMessage.error('加载传感器数据失败')
+  } finally {
+    loading.value = false
+  }
+})
 
 const loading = ref(false)
 const searchKeyword = ref('')

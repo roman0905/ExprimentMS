@@ -65,7 +65,7 @@ export interface CompetitorFile {
   competitor_file_id: number
   person_id: number
   batch_id: number
-  file_name: string
+  file_path: string
   person_name?: string
   batch_number?: string
 }
@@ -83,114 +83,112 @@ export interface FingerBloodData {
 export interface Sensor {
   sensor_id: number
   sensor_name: string
-  sensor_type: string
-  model: string
-  manufacturer: string
-  installation_date: string
-  last_maintenance: string
-  status: string
-  location: string
-  description?: string
+  person_id: number
+  batch_id: number
+  start_time: string
+  end_time?: string
+  person_name?: string
+  batch_number?: string
 }
 
 // API服务类
 export class ApiService {
   // 批次管理
   static async getBatches(): Promise<Batch[]> {
-    return api.get('/batches/')
+    return api.get('/api/batches/')
   }
 
   static async createBatch(batch: Omit<Batch, 'batch_id'>): Promise<Batch> {
-    return api.post('/batches/', batch)
+    return api.post('/api/batches/', batch)
   }
 
   static async updateBatch(id: number, batch: Partial<Batch>): Promise<Batch> {
-    return api.put(`/batches/${id}`, batch)
+    return api.put(`/api/batches/${id}`, batch)
   }
 
   static async deleteBatch(id: number): Promise<void> {
-    return api.delete(`/batches/${id}`)
+    return api.delete(`/api/batches/${id}`)
   }
 
   // 人员管理
   static async getPersons(): Promise<Person[]> {
-    return api.get('/persons/')
+    return api.get('/api/persons/')
   }
 
   static async createPerson(person: Omit<Person, 'person_id'>): Promise<Person> {
-    return api.post('/persons/', person)
+    return api.post('/api/persons/', person)
   }
 
   static async updatePerson(id: number, person: Partial<Person>): Promise<Person> {
-    return api.put(`/persons/${id}`, person)
+    return api.put(`/api/persons/${id}`, person)
   }
 
   static async deletePerson(id: number): Promise<void> {
-    return api.delete(`/persons/${id}`)
+    return api.delete(`/api/persons/${id}`)
   }
 
   // 实验管理
   static async getExperiments(): Promise<Experiment[]> {
-    return api.get('/experiments/')
+    return api.get('/api/experiments/')
   }
 
   static async createExperiment(experiment: Omit<Experiment, 'experiment_id'>): Promise<Experiment> {
-    return api.post('/experiments/', experiment)
+    return api.post('/api/experiments/', experiment)
   }
 
   static async updateExperiment(id: number, experiment: Partial<Experiment>): Promise<Experiment> {
-    return api.put(`/experiments/${id}`, experiment)
+    return api.put(`/api/experiments/${id}`, experiment)
   }
 
   static async deleteExperiment(id: number): Promise<void> {
-    return api.delete(`/experiments/${id}`)
+    return api.delete(`/api/experiments/${id}`)
   }
 
   // 竞品文件管理
   static async getCompetitorFiles(): Promise<CompetitorFile[]> {
-    return api.get('/competitor-files/')
+    return api.get('/api/competitor-files/')
   }
 
   static async createCompetitorFile(file: Omit<CompetitorFile, 'competitor_file_id'>): Promise<CompetitorFile> {
-    return api.post('/competitor-files/', file)
+    return api.post('/api/competitor-files/', file)
   }
 
   static async deleteCompetitorFile(id: number): Promise<void> {
-    return api.delete(`/competitor-files/${id}`)
+    return api.delete(`/api/competitor-files/${id}`)
   }
 
   // 指尖血数据管理
   static async getFingerBloodData(): Promise<FingerBloodData[]> {
-    return api.get('/finger-blood-data/')
+    return api.get('/api/finger-blood-data/')
   }
 
   static async createFingerBloodData(data: Omit<FingerBloodData, 'finger_blood_file_id'>): Promise<FingerBloodData> {
-    return api.post('/finger-blood-data/', data)
+    return api.post('/api/finger-blood-data/', data)
   }
 
   static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): Promise<FingerBloodData> {
-    return api.put(`/finger-blood-data/${id}`, data)
+    return api.put(`/api/finger-blood-data/${id}`, data)
   }
 
   static async deleteFingerBloodData(id: number): Promise<void> {
-    return api.delete(`/finger-blood-data/${id}`)
+    return api.delete(`/api/finger-blood-data/${id}`)
   }
 
   // 传感器管理
   static async getSensors(): Promise<Sensor[]> {
-    return api.get('/sensors/')
+    return api.get('/api/sensors/')
   }
 
   static async createSensor(sensor: Omit<Sensor, 'sensor_id'>): Promise<Sensor> {
-    return api.post('/sensors/', sensor)
+    return api.post('/api/sensors/', sensor)
   }
 
   static async updateSensor(id: number, sensor: Partial<Sensor>): Promise<Sensor> {
-    return api.put(`/sensors/${id}`, sensor)
+    return api.put(`/api/sensors/${id}`, sensor)
   }
 
   static async deleteSensor(id: number): Promise<void> {
-    return api.delete(`/sensors/${id}`)
+    return api.delete(`/api/sensors/${id}`)
   }
 }
 

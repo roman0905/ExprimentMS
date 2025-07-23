@@ -59,9 +59,7 @@ class CompetitorFile(Base):
     competitor_file_id = Column(Integer, primary_key=True, index=True, comment="竞品文件唯一标识符")
     person_id = Column(Integer, ForeignKey("persons.person_id"), nullable=False, comment="关联的人员ID")
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False, comment="关联的批次ID")
-    file_name = Column(String(255), nullable=False, comment="竞品文件名")
     file_path = Column(String(512), nullable=False, comment="文件存储路径")
-    upload_time = Column(DateTime, default=datetime.utcnow, comment="上传时间")
     
     # 关系
     person = relationship("Person", back_populates="competitor_files")

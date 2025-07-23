@@ -6,7 +6,7 @@ import os
 # 数据库配置
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "mysql+pymysql://root:password@localhost:3306/experiment_manage"
+    "mysql+pymysql://root:1234@localhost:3306/experiment_manage"
 )
 
 # 创建数据库引擎

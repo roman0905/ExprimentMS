@@ -70,15 +70,13 @@ class ExperimentResponse(ExperimentBase):
 class CompetitorFileBase(BaseModel):
     person_id: int
     batch_id: int
-    file_name: str
+    file_path: str
 
 class CompetitorFileCreate(CompetitorFileBase):
-    file_path: str
+    pass
 
 class CompetitorFileResponse(CompetitorFileBase):
     competitor_file_id: int
-    file_path: str
-    upload_time: datetime
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
     

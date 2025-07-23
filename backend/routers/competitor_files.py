@@ -41,9 +41,7 @@ def get_competitor_files(
             "competitor_file_id": file.competitor_file_id,
             "person_id": file.person_id,
             "batch_id": file.batch_id,
-            "file_name": file.file_name,
             "file_path": file.file_path,
-            "upload_time": file.upload_time,
             "person_name": file.person.person_name if file.person else None,
             "batch_number": file.batch.batch_number if file.batch else None
         }
@@ -85,9 +83,7 @@ async def upload_competitor_file(
     db_file = CompetitorFile(
         person_id=person_id,
         batch_id=batch_id,
-        file_name=file.filename,
-        file_path=file_path,
-        upload_time=datetime.now()
+        file_path=file_path
     )
     
     db.add(db_file)
@@ -98,9 +94,7 @@ async def upload_competitor_file(
         competitor_file_id=db_file.competitor_file_id,
         person_id=db_file.person_id,
         batch_id=db_file.batch_id,
-        file_name=db_file.file_name,
         file_path=db_file.file_path,
-        upload_time=db_file.upload_time,
         person_name=person.person_name,
         batch_number=batch.batch_number
     )
@@ -117,9 +111,12 @@ def download_competitor_file(file_id: int, db: Session = Depends(get_db)):
     if not os.path.exists(file_record.file_path):
         raise HTTPException(status_code=404, detail="文件已被删除或移动")
     
+    # 从文件路径中提取文件名
+    filename = os.path.basename(file_record.file_path)
+    
     return FileResponse(
         path=file_record.file_path,
-        filename=file_record.file_name,
+        filename=filename,
         media_type='application/octet-stream'
     )
 
