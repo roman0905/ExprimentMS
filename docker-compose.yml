@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: experiment_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: experiment_db
+      MYSQL_USER: experiment_user
+      MYSQL_PASSWORD: experiment_pass
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+    restart: unless-stopped
+    command: --default-authentication-plugin=mysql_native_password
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    build: ./backend
+    container_name: experiment_backend
+    environment:
+      DATABASE_URL: mysql+pymysql://experiment_user:experiment_pass@mysql:3306/experiment_db
+      SECRET_KEY: iX95PYMWUEpCSbN8a-KY_lc3pyRwZvHFAROzxQ9_k7k
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      HOST: 0.0.0.0
+      PORT: 8000
+      RELOAD: false
+      UPLOAD_DIR: uploads
+      MAX_FILE_SIZE: 10485760
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin123
+    volumes:
+      - ./backend/uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    container_name: experiment_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mysql_data:
+
+networks:
+  default:
+    name: experiment_network
