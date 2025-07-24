@@ -68,12 +68,12 @@
         <div class="action-buttons">
           <el-button type="primary" @click="$router.push('/batches')">
             <el-icon><Plus /></el-icon>
-            新建批次
+            新建实验批次
           </el-button>
           
           <el-button type="success" @click="$router.push('/persons')">
             <el-icon><UserFilled /></el-icon>
-            添加人员
+            添加实验人员
           </el-button>
           
           <el-button type="warning" @click="$router.push('/experiments')">
@@ -83,7 +83,7 @@
           
           <el-button type="info" @click="$router.push('/finger-blood-data')">
             <el-icon><DataLine /></el-icon>
-            录入数据
+            录入指尖血数据
           </el-button>
         </div>
       </el-card>
@@ -137,37 +137,40 @@ const fetchRecentActivities = async () => {
   try {
     loading.value = true
     const activities = await ApiService.getActivities()
-    recentActivities.value = activities.map(activity => ({
-      id: activity.activity_id,
-      description: activity.description,
-      time: new Date(activity.createTime).toLocaleString('zh-CN'),
-      type: getActivityType(activity.activity_type)
-    }))
+    recentActivities.value = activities.map(activity => {
+      const username = activity.username || '系统'
+      return {
+        id: activity.activity_id,
+        description: `${username} ${activity.description}`,
+        time: new Date(activity.createTime).toLocaleString('zh-CN'),
+        type: getActivityType(activity.activity_type)
+      }
+    })
   } catch (error) {
     console.error('获取活动数据失败:', error)
     // 使用模拟数据作为后备
     recentActivities.value = [
       {
         id: 1,
-        description: '创建了新批次 BATCH002',
+        description: 'admin 创建了新批次 BATCH002',
         time: '2024-01-02 09:00:00',
         type: 'primary'
       },
       {
         id: 2,
-        description: '添加了受试人员 李四',
+        description: 'admin 添加了受试人员 李四',
         time: '2024-01-01 16:30:00',
         type: 'success'
       },
       {
         id: 3,
-        description: '录入了血糖数据',
+        description: 'user1 录入了血糖数据',
         time: '2024-01-01 14:00:00',
         type: 'warning'
       },
       {
         id: 4,
-        description: '创建了血糖监测实验',
+        description: 'admin 创建了血糖监测实验',
         time: '2024-01-01 10:00:00',
         type: 'info'
       }

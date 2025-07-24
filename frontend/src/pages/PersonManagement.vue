@@ -22,11 +22,18 @@
       </div>
       
       <div class="toolbar-right">
-        <el-button @click="handleExport">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('person_management', 'read')"
+          @click="handleExport"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('person_management', 'write')"
+          type="primary" 
+          @click="handleAdd"
+        >
           <el-icon><Plus /></el-icon>
           新建人员
         </el-button>
@@ -64,24 +71,18 @@
             {{ row.age || '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="height_cm" label="身高(cm)" min-width="100">
+        <el-table-column prop="batch_number" label="所属批次" min-width="120">
           <template #default="{ row }">
-            {{ row.height_cm || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="weight_kg" label="体重(kg)" min-width="100">
-          <template #default="{ row }">
-            {{ row.weight_kg || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="BMI" min-width="80">
-          <template #default="{ row }">
-            {{ calculateBMI(row.height_cm, row.weight_kg) }}
+            <el-tag v-if="row.batch_number" type="info" size="small">
+              {{ row.batch_number }}
+            </el-tag>
+            <span v-else class="text-gray-400">未分配</span>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
+              :disabled="!authStore.hasModulePermission('person_management', 'write')"
               type="primary"
               size="small"
               @click="handleEdit(row)"
@@ -89,6 +90,7 @@
               编辑
             </el-button>
             <el-button
+              :disabled="!authStore.hasModulePermission('person_management', 'delete')"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -151,26 +153,20 @@
           />
         </el-form-item>
         
-        <el-form-item label="身高(cm)" prop="height_cm">
-          <el-input-number
-            v-model="form.height_cm"
-            :min="50"
-            :max="250"
-            :precision="1"
-            placeholder="请输入身高"
+        <el-form-item label="所属批次" prop="batch_id">
+          <el-select
+            v-model="form.batch_id"
+            placeholder="请选择批次"
             style="width: 100%"
-          />
-        </el-form-item>
-        
-        <el-form-item label="体重(kg)" prop="weight_kg">
-          <el-input-number
-            v-model="form.weight_kg"
-            :min="10"
-            :max="300"
-            :precision="1"
-            placeholder="请输入体重"
-            style="width: 100%"
-          />
+            clearable
+          >
+            <el-option
+              v-for="batch in batches"
+              :key="batch.batch_id"
+              :label="batch.batch_number"
+              :value="batch.batch_id"
+            />
+          </el-select>
         </el-form-item>
       </el-form>
       
@@ -191,18 +187,25 @@ import { Search, Plus, Download } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type Person } from '../stores/data'
 import { ApiService } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
   try {
     loading.value = true
-    const personsData = await ApiService.getPersons()
+    // 并行获取人员数据和批次数据
+    const [personsData, batchesData] = await Promise.all([
+      ApiService.getPersons(),
+      ApiService.getBatchesForPerson()
+    ])
     dataStore.persons = personsData
+    batches.value = batchesData
   } catch (error) {
-    console.error('Failed to load persons:', error)
-    ElMessage.error('加载人员数据失败')
+    console.error('Failed to load data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
@@ -213,6 +216,7 @@ const searchText = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
+const batches = ref<any[]>([])
 
 // 分页相关
 const currentPage = ref(1)
@@ -224,8 +228,7 @@ const form = reactive({
   person_name: '',
   gender: 'Male' as 'Male' | 'Female' | 'Other',
   age: undefined as number | undefined,
-  height_cm: undefined as number | undefined,
-  weight_kg: undefined as number | undefined
+  batch_id: undefined as number | undefined
 })
 
 const genderMap = {
@@ -268,13 +271,7 @@ const paginatedPersons = computed(() => {
 // 总数据量
 const total = computed(() => filteredPersons.value.length)
 
-// 计算BMI
-const calculateBMI = (height?: number, weight?: number): string => {
-  if (!height || !weight) return '-'
-  const heightInM = height / 100
-  const bmi = weight / (heightInM * heightInM)
-  return bmi.toFixed(1)
-}
+
 
 // 分页事件处理
 const handleSizeChange = (val: number) => {
@@ -306,9 +303,7 @@ const handleExport = () => {
       '姓名': person.person_name,
       '性别': genderMap[person.gender] || '未知',
       '年龄': person.age || '-',
-      '身高(cm)': person.height_cm || '-',
-      '体重(kg)': person.weight_kg || '-',
-      'BMI': calculateBMI(person.height_cm, person.weight_kg)
+      '所属批次': person.batch_number || '未分配'
     }))
     
     // 创建工作簿
@@ -321,9 +316,7 @@ const handleExport = () => {
       { wch: 15 }, // 姓名
       { wch: 8 },  // 性别
       { wch: 8 },  // 年龄
-      { wch: 12 }, // 身高
-      { wch: 12 }, // 体重
-      { wch: 8 }   // BMI
+      { wch: 15 }  // 所属批次
     ]
     ws['!cols'] = colWidths
     
@@ -371,10 +364,13 @@ const handleDelete = async (row: Person) => {
       }
     )
     
-    dataStore.deletePerson(row.person_id)
+    await dataStore.deletePerson(row.person_id)
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -382,32 +378,43 @@ const handleDelete = async (row: Person) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  await formRef.value.validate((valid) => {
+  await formRef.value.validate(async (valid) => {
     if (valid) {
-      if (isEdit.value) {
-        // 编辑
-        dataStore.updatePerson(form.person_id, {
-          person_name: form.person_name,
-          gender: form.gender,
-          age: form.age,
-          height_cm: form.height_cm,
-          weight_kg: form.weight_kg
-        })
-        ElMessage.success('更新成功')
-      } else {
-        // 新建
-        dataStore.addPerson({
-          person_name: form.person_name,
-          gender: form.gender,
-          age: form.age,
-          height_cm: form.height_cm,
-          weight_kg: form.weight_kg
-        })
-        ElMessage.success('创建成功')
+      try {
+        if (isEdit.value) {
+          // 编辑
+          await dataStore.updatePerson(form.person_id, {
+            person_name: form.person_name,
+            gender: form.gender,
+            age: form.age,
+            batch_id: form.batch_id
+          })
+          ElMessage.success('更新成功')
+        } else {
+          // 新建
+          await dataStore.addPerson({
+            person_name: form.person_name,
+            gender: form.gender,
+            age: form.age,
+            batch_id: form.batch_id
+          })
+          ElMessage.success('创建成功')
+        }
+        
+        // 重新加载人员数据以确保UI刷新
+        const [personsData, batchesData] = await Promise.all([
+          ApiService.getPersons(),
+          ApiService.getBatchesForPerson()
+        ])
+        dataStore.persons = personsData
+        batches.value = batchesData
+        
+        dialogVisible.value = false
+        resetForm()
+      } catch (error) {
+        console.error('Submit failed:', error)
+        ElMessage.error(isEdit.value ? '更新失败' : '创建失败')
       }
-      
-      dialogVisible.value = false
-      resetForm()
     }
   })
 }
@@ -422,8 +429,7 @@ const resetForm = () => {
     person_name: '',
     gender: 'Male' as 'Male' | 'Female' | 'Other',
     age: undefined,
-    height_cm: undefined,
-    weight_kg: undefined
+    batch_id: undefined
   })
 }
 </script>

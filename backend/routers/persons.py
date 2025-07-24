@@ -1,11 +1,17 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from database import get_db
-from models import Person
-from schemas import PersonCreate, PersonUpdate, PersonResponse, MessageResponse
+from models import Person, Batch
+from schemas import PersonCreate, PersonUpdate, PersonResponse, MessageResponse, BatchResponse
 
 router = APIRouter(prefix="/api/persons", tags=["人员管理"])
+
+@router.get("/batches", response_model=List[BatchResponse])
+def get_batches_for_person(db: Session = Depends(get_db)):
+    """获取可选择的批次列表"""
+    batches = db.query(Batch).all()
+    return batches
 
 @router.get("/", response_model=List[PersonResponse])
 def get_persons(
@@ -15,13 +21,27 @@ def get_persons(
     db: Session = Depends(get_db)
 ):
     """获取人员列表"""
-    query = db.query(Person)
+    query = db.query(Person).options(joinedload(Person.batch))
     
     if search:
         query = query.filter(Person.person_name.contains(search))
     
     persons = query.offset(skip).limit(limit).all()
-    return persons
+    
+    # 构建返回结果，包含批次信息
+    result = []
+    for person in persons:
+        person_dict = {
+            "person_id": person.person_id,
+            "person_name": person.person_name,
+            "gender": person.gender,
+            "age": person.age,
+            "batch_id": person.batch_id,
+            "batch_number": person.batch.batch_number if person.batch else None
+        }
+        result.append(PersonResponse(**person_dict))
+    
+    return result
 
 @router.post("/", response_model=PersonResponse)
 def create_person(person: PersonCreate, db: Session = Depends(get_db)):

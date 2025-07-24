@@ -47,9 +47,9 @@ export interface Person {
   person_id: number
   person_name: string
   gender?: 'Male' | 'Female' | 'Other'
-  height_cm?: number
-  weight_kg?: number
   age?: number
+  batch_id?: number
+  batch_number?: string
 }
 
 export interface ExperimentMember {
@@ -143,6 +143,10 @@ export class ApiService {
 
   static async deletePerson(id: number): Promise<void> {
     return api.delete(`/api/persons/${id}`)
+  }
+
+  static async getBatchesForPerson(): Promise<Batch[]> {
+    return api.get('/api/persons/batches')
   }
 
   // 实验管理

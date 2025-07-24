@@ -33,6 +33,7 @@ class Batch(Base):
     end_time = Column(DateTime, nullable=True, comment="批次结束时间")
     
     # 关系
+    persons = relationship("Person", back_populates="batch")
     experiments = relationship("Experiment", back_populates="batch")
     competitor_files = relationship("CompetitorFile", back_populates="batch")
     finger_blood_files = relationship("FingerBloodFile", back_populates="batch")
@@ -44,11 +45,11 @@ class Person(Base):
     person_id = Column(Integer, primary_key=True, index=True, comment="人员唯一标识符")
     person_name = Column(String(100), nullable=False, comment="人员名字")
     gender = Column(Enum(GenderEnum), nullable=True, comment="性别")
-    height_cm = Column(DECIMAL(5, 2), nullable=True, comment="身高，单位厘米")
-    weight_kg = Column(DECIMAL(5, 2), nullable=True, comment="体重，单位千克")
     age = Column(Integer, nullable=True, comment="年龄")
+    batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=True, comment="关联的批次ID")
     
     # 关系
+    batch = relationship("Batch", back_populates="persons")
     competitor_files = relationship("CompetitorFile", back_populates="person")
     finger_blood_files = relationship("FingerBloodFile", back_populates="person")
     sensors = relationship("Sensor", back_populates="person")

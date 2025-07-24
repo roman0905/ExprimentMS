@@ -24,7 +24,7 @@
           v-model="filterBatch"
           placeholder="筛选批次"
           clearable
-          style="width: 200px; margin-right: 12px"
+          style="width: 150px; margin-right: 12px"
           @change="handleFilter"
         >
           <el-option
@@ -32,6 +32,21 @@
             :key="batch.batch_id"
             :label="batch.batch_number"
             :value="batch.batch_id.toString()"
+          />
+        </el-select>
+        
+        <el-select
+          v-model="filterPerson"
+          placeholder="筛选人员"
+          clearable
+          style="width: 150px; margin-right: 12px"
+          @change="handleFilter"
+        >
+          <el-option
+            v-for="person in filteredPersonsForFilter"
+            :key="person.person_id"
+            :label="person.person_name"
+            :value="person.person_id.toString()"
           />
         </el-select>
         
@@ -48,11 +63,18 @@
       </div>
       
       <div class="toolbar-right">
-        <el-button @click="handleExport">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('sensor_management', 'read')"
+          @click="handleExport"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('sensor_management', 'write')"
+          type="primary" 
+          @click="handleAdd"
+        >
           <el-icon><Plus /></el-icon>
           添加传感器
         </el-button>
@@ -136,6 +158,7 @@
         <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <el-button
+              :disabled="!authStore.hasModulePermission('sensor_management', 'write')"
               type="primary"
               size="small"
               @click="handleEdit(row)"
@@ -143,6 +166,7 @@
               编辑
             </el-button>
             <el-button
+              :disabled="!authStore.hasModulePermission('sensor_management', 'delete')"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -198,12 +222,15 @@
                 filterable
               >
                 <el-option
-                  v-for="person in persons"
+                  v-for="person in filteredPersonsForSensor"
                   :key="person.person_id"
                   :label="`${person.person_name} (ID: ${person.person_id})`"
                   :value="person.person_id"
                 />
               </el-select>
+              <div class="form-tip">
+                {{ form.batch_id ? '显示该批次下的人员' : '请先选择批次' }}
+              </div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -265,7 +292,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import {
   Search,
@@ -278,8 +305,10 @@ import {
 import * as XLSX from 'xlsx'
 import { useDataStore, type Sensor, type Person, type Batch } from '../stores/data'
 import { ApiService } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 // 人员和批次数据
 const persons = ref<Person[]>([])
@@ -308,6 +337,7 @@ onMounted(async () => {
 const loading = ref(false)
 const searchKeyword = ref('')
 const filterBatch = ref('')
+const filterPerson = ref('')
 const filterStatus = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -343,6 +373,21 @@ const rules = {
   ]
 }
 
+// 根据选择的批次过滤人员（传感器表单）
+const filteredPersonsForSensor = computed(() => {
+  if (!form.batch_id) {
+    return []
+  }
+  return persons.value.filter(person => person.batch_id === form.batch_id)
+})
+
+// 监听批次选择变化，清空人员选择（传感器表单）
+watch(() => form.batch_id, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    form.person_id = null
+  }
+})
+
 
 
 // 过滤后的传感器列表
@@ -358,6 +403,10 @@ const filteredSensors = computed(() => {
   
   if (filterBatch.value) {
     result = result.filter(sensor => sensor.batch_id.toString() === filterBatch.value)
+  }
+  
+  if (filterPerson.value) {
+    result = result.filter(sensor => sensor.person_id.toString() === filterPerson.value)
   }
   
   if (filterStatus.value) {
@@ -513,10 +562,13 @@ const handleDelete = async (row: Sensor) => {
       }
     )
     
-    dataStore.deleteSensor(row.sensor_id)
+    await dataStore.deleteSensor(row.sensor_id)
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -524,32 +576,37 @@ const handleDelete = async (row: Sensor) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  await formRef.value.validate((valid) => {
+  await formRef.value.validate(async (valid) => {
     if (valid) {
-      if (isEdit.value) {
-        // 编辑
-        dataStore.updateSensor(form.sensor_id, {
-          sensor_name: form.sensor_name,
-          person_id: form.person_id,
-          batch_id: form.batch_id,
-          start_time: form.start_time,
-          end_time: form.end_time
-        })
-        ElMessage.success('更新成功')
-      } else {
-        // 新建
-        dataStore.addSensor({
-          sensor_name: form.sensor_name,
-          person_id: form.person_id,
-          batch_id: form.batch_id,
-          start_time: form.start_time,
-          end_time: form.end_time
-        })
-        ElMessage.success('添加成功')
+      try {
+        if (isEdit.value) {
+          // 编辑
+          await dataStore.updateSensor(form.sensor_id, {
+            sensor_name: form.sensor_name,
+            person_id: form.person_id,
+            batch_id: form.batch_id,
+            start_time: form.start_time,
+            end_time: form.end_time
+          })
+          ElMessage.success('更新成功')
+        } else {
+          // 新建
+          await dataStore.addSensor({
+            sensor_name: form.sensor_name,
+            person_id: form.person_id,
+            batch_id: form.batch_id,
+            start_time: form.start_time,
+            end_time: form.end_time
+          })
+          ElMessage.success('添加成功')
+        }
+        
+        dialogVisible.value = false
+        resetForm()
+      } catch (error) {
+        console.error('Submit failed:', error)
+        ElMessage.error(isEdit.value ? '更新失败' : '添加失败')
       }
-      
-      dialogVisible.value = false
-      resetForm()
     }
   })
 }
@@ -568,6 +625,27 @@ const resetForm = () => {
     end_time: ''
   })
 }
+
+// 根据选择的批次过滤人员（过滤区域）
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatch.value) {
+    return persons.value
+  }
+  return persons.value.filter(person => person.batch_id.toString() === filterBatch.value)
+})
+
+// 监听过滤批次选择变化，清空人员过滤
+watch(() => filterBatch.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId && newBatchId) {
+    // 如果当前选择的人员不属于新批次，则清空人员过滤
+    if (filterPerson.value) {
+      const selectedPerson = persons.value.find(p => p.person_id.toString() === filterPerson.value)
+      if (!selectedPerson || selectedPerson.batch_id.toString() !== newBatchId) {
+        filterPerson.value = ''
+      }
+    }
+  }
+})
 </script>
 
 <style scoped>

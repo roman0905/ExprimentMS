@@ -43,9 +43,8 @@ class BatchResponse(BatchBase):
 class PersonBase(BaseModel):
     person_name: str
     gender: Optional[GenderEnum] = None
-    height_cm: Optional[float] = None
-    weight_kg: Optional[float] = None
     age: Optional[int] = None
+    batch_id: Optional[int] = None
 
 class PersonCreate(PersonBase):
     pass
@@ -55,6 +54,7 @@ class PersonUpdate(PersonBase):
 
 class PersonResponse(PersonBase):
     person_id: int
+    batch_number: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -209,6 +209,10 @@ class UserListResponse(BaseModel):
 
 # 登录相关模式
 class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class RegisterRequest(BaseModel):
     username: str
     password: str
 

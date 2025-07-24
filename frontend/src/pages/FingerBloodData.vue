@@ -31,7 +31,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="person in dataStore.persons"
+            v-for="person in filteredPersonsForFilter"
             :key="person.person_id"
             :label="`${person.person_name} (ID: ${person.person_id})`"
             :value="person.person_id"
@@ -56,11 +56,19 @@
           <el-icon><TrendCharts /></el-icon>
           {{ showChart ? '隐藏图表' : '显示图表' }}
         </el-button>
-        <el-button @click="handleExport" :loading="exportLoading">
+        <el-button 
+          @click="handleExport" 
+          :loading="exportLoading"
+          :disabled="!authStore.hasModulePermission('finger_blood_data', 'read')"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          type="primary" 
+          @click="handleAdd"
+          :disabled="!authStore.hasModulePermission('finger_blood_data', 'write')"
+        >
           <el-icon><Plus /></el-icon>
           录入数据
         </el-button>
@@ -133,6 +141,7 @@
               type="primary"
               size="small"
               @click="handleEdit(row)"
+              :disabled="!authStore.hasModulePermission('finger_blood_data', 'write')"
             >
               编辑
             </el-button>
@@ -140,6 +149,7 @@
               type="danger"
               size="small"
               @click="handleDelete(row)"
+              :disabled="!authStore.hasModulePermission('finger_blood_data', 'delete')"
             >
               删除
             </el-button>
@@ -196,12 +206,15 @@
             style="width: 100%"
           >
             <el-option
-              v-for="person in dataStore.persons"
+              v-for="person in filteredPersonsForForm"
               :key="person.person_id"
               :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
+          <div class="form-tip">
+            {{ form.batch_id ? '显示该批次下的人员' : '请先选择批次' }}
+          </div>
         </el-form-item>
         
         <el-form-item label="采集时间" prop="collection_time">
@@ -258,6 +271,7 @@ import {
   DataZoomComponent
 } from 'echarts/components'
 import { useDataStore, type FingerBloodData } from '../stores/data'
+import { useAuthStore } from '../stores/auth'
 import { ApiService } from '../services/api'
 
 // 注册ECharts组件
@@ -272,6 +286,7 @@ use([
 ])
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const exportLoading = ref(false)
@@ -326,6 +341,42 @@ const rules = {
     { type: 'number', min: 0, max: 30, message: '血糖值应在0-30之间', trigger: 'blur' }
   ]
 }
+
+// 根据选择的批次过滤人员（表单）
+const filteredPersonsForForm = computed(() => {
+  if (!form.batch_id) {
+    return []
+  }
+  return dataStore.persons.filter(person => person.batch_id === form.batch_id)
+})
+
+// 监听批次选择变化，清空人员选择（表单）
+watch(() => form.batch_id, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    form.person_id = undefined
+  }
+})
+
+// 根据选择的批次过滤人员（过滤区域）
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return dataStore.persons
+  }
+  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听过滤批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId && newBatchId) {
+    // 如果当前选择的人员不属于新批次，则清空人员过滤
+    if (filterPersonId.value) {
+      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
+      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
+        filterPersonId.value = undefined
+      }
+    }
+  }
+})
 
 // 过滤后的数据列表
 const filteredData = computed(() => {
@@ -567,10 +618,13 @@ const handleDelete = async (row: FingerBloodData) => {
       }
     )
     
-    dataStore.deleteFingerBloodData(row.finger_blood_file_id)
+    await dataStore.deleteFingerBloodData(row.finger_blood_file_id)
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -636,30 +690,35 @@ const handleExport = () => {
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  await formRef.value.validate((valid) => {
+  await formRef.value.validate(async (valid) => {
     if (valid) {
-      if (isEdit.value) {
-        // 编辑
-        dataStore.updateFingerBloodData(form.finger_blood_file_id, {
-          batch_id: form.batch_id!,
-          person_id: form.person_id!,
-          collection_time: form.collection_time,
-          blood_glucose_value: form.blood_glucose_value!
-        })
-        ElMessage.success('更新成功')
-      } else {
-        // 新建
-        dataStore.addFingerBloodData({
-          batch_id: form.batch_id!,
-          person_id: form.person_id!,
-          collection_time: form.collection_time,
-          blood_glucose_value: form.blood_glucose_value!
-        })
-        ElMessage.success('录入成功')
+      try {
+        if (isEdit.value) {
+          // 编辑
+          await dataStore.updateFingerBloodData(form.finger_blood_file_id, {
+            batch_id: form.batch_id!,
+            person_id: form.person_id!,
+            collection_time: form.collection_time,
+            blood_glucose_value: form.blood_glucose_value!
+          })
+          ElMessage.success('更新成功')
+        } else {
+          // 新建
+          await dataStore.addFingerBloodData({
+            batch_id: form.batch_id!,
+            person_id: form.person_id!,
+            collection_time: form.collection_time,
+            blood_glucose_value: form.blood_glucose_value!
+          })
+          ElMessage.success('录入成功')
+        }
+        
+        dialogVisible.value = false
+        resetForm()
+      } catch (error) {
+        console.error('Submit failed:', error)
+        ElMessage.error(isEdit.value ? '更新失败' : '录入失败')
       }
-      
-      dialogVisible.value = false
-      resetForm()
     }
   })
 }

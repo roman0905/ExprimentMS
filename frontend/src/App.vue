@@ -14,15 +14,17 @@ const dataStore = useDataStore()
 
 // 初始化应用
 onMounted(async () => {
-  // 初始化认证状态
-  authStore.initAuth()
+  // 设置API拦截器
+  authStore.setupApiInterceptors()
   
-  // 如果已登录，初始化数据
+  // 注意：认证状态初始化现在由路由守卫处理，避免重复初始化
+  // 这里只需要在已登录状态下初始化数据
   if (authStore.isLoggedIn) {
     try {
       await dataStore.initializeData()
     } catch (error) {
       console.error('Failed to initialize data:', error)
+      // 数据初始化失败不影响认证状态
     }
   }
 })

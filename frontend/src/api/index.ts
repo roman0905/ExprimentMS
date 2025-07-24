@@ -15,6 +15,10 @@ export const userApi = {
   login: (data: { username: string; password: string }) => 
     api.post('/api/auth/login', data),
   
+  // 注册
+  register: (data: { username: string; password: string }) => 
+    api.post('/api/auth/register', data),
+  
   // 获取当前用户信息
   getCurrentUser: () => 
     api.get('/api/auth/me'),

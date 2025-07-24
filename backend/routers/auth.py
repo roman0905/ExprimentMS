@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import User, UserPermission, RoleEnum, ModuleEnum
 from schemas import (
-    LoginRequest, LoginResponse, UserCreate, UserUpdate, UserResponse,
+    LoginRequest, RegisterRequest, LoginResponse, UserCreate, UserUpdate, UserResponse,
     UserListResponse, UserPermissionCreate, UserPermissionResponse,
     AssignPermissionsRequest, MessageResponse
 )
@@ -142,6 +142,51 @@ def login(login_data: LoginRequest, db: Session = Depends(get_db)):
             "user_id": user.user_id,
             "username": user.username,
             "role": user.role.value
+        }
+    )
+
+@router.post("/register", response_model=LoginResponse)
+def register(register_data: RegisterRequest, db: Session = Depends(get_db)):
+    """用户注册"""
+    # 检查用户名是否已存在
+    existing_user = db.query(User).filter(User.username == register_data.username).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名已存在"
+        )
+    
+    # 密码强度验证
+    if len(register_data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码长度至少6位"
+        )
+    
+    # 创建新用户，默认角色为普通用户
+    hashed_password = get_password_hash(register_data.password)
+    db_user = User(
+        username=register_data.username,
+        password_hash=hashed_password,
+        role=RoleEnum.User  # 默认为普通用户
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    
+    # 注册成功后自动登录
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": db_user.username}, expires_delta=access_token_expires
+    )
+    
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user_info={
+            "user_id": db_user.user_id,
+            "username": db_user.username,
+            "role": db_user.role.value
         }
     )
 

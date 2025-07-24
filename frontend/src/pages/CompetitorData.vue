@@ -31,7 +31,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="person in dataStore.persons"
+            v-for="person in filteredPersonsForFilter"
             :key="person.person_id"
             :label="`${person.person_name} (ID: ${person.person_id})`"
             :value="person.person_id"
@@ -40,11 +40,19 @@
       </div>
       
       <div class="toolbar-right">
-        <el-button @click="handleExport" :loading="exporting">
+        <el-button 
+          @click="handleExport" 
+          :loading="exporting"
+          :disabled="!authStore.hasModulePermission('competitor_data', 'read')"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleUpload">
+        <el-button 
+          type="primary" 
+          @click="handleUpload"
+          :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
+        >
           <el-icon><Upload /></el-icon>
           上传文件
         </el-button>
@@ -93,6 +101,7 @@
               type="primary"
               size="small"
               @click="handleDownload(row)"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'read')"
             >
               <el-icon><Download /></el-icon>
               下载
@@ -101,6 +110,7 @@
               type="warning"
               size="small"
               @click="handleRename(row)"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
             >
               <el-icon><Edit /></el-icon>
               重命名
@@ -109,6 +119,7 @@
               type="danger"
               size="small"
               @click="handleDelete(row)"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'delete')"
             >
               <el-icon><Delete /></el-icon>
               删除
@@ -166,12 +177,15 @@
             style="width: 100%"
           >
             <el-option
-              v-for="person in dataStore.persons"
+              v-for="person in filteredPersonsForUpload"
               :key="person.person_id"
               :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
+          <div class="form-tip">
+            {{ uploadForm.batch_id ? '显示该批次下的人员' : '请先选择批次' }}
+          </div>
         </el-form-item>
         
         <el-form-item label="选择文件" prop="file">
@@ -250,7 +264,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type UploadFile } from 'element-plus'
 import {
   Upload,
@@ -262,9 +276,11 @@ import {
 } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type CompetitorFile } from '../stores/data'
+import { useAuthStore } from '../stores/auth'
 import { ApiService } from '../services/api'
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
@@ -333,6 +349,42 @@ const renameRules = {
     }
   ]
 }
+
+// 根据选择的批次过滤人员（上传表单）
+const filteredPersonsForUpload = computed(() => {
+  if (!uploadForm.batch_id) {
+    return []
+  }
+  return dataStore.persons.filter(person => person.batch_id === uploadForm.batch_id)
+})
+
+// 监听批次选择变化，清空人员选择（上传表单）
+watch(() => uploadForm.batch_id, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    uploadForm.person_id = undefined
+  }
+})
+
+// 根据选择的批次过滤人员（过滤区域）
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return dataStore.persons
+  }
+  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听过滤批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId && newBatchId) {
+    // 如果当前选择的人员不属于新批次，则清空人员过滤
+    if (filterPersonId.value) {
+      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
+      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
+        filterPersonId.value = undefined
+      }
+    }
+  }
+})
 
 // 过滤后的文件列表
 const filteredFiles = computed(() => {

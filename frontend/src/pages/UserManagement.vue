@@ -63,7 +63,11 @@
           <el-input v-model="userForm.password" type="password" placeholder="留空则不修改密码" />
         </el-form-item>
         <el-form-item label="角色" prop="role">
-          <el-select v-model="userForm.role" placeholder="请选择角色">
+          <el-select 
+            v-model="userForm.role" 
+            placeholder="请选择角色"
+            :disabled="editingUser && editingUser.user_id === authStore.userInfo?.user_id && editingUser.role === 'Admin'"
+          >
             <el-option label="管理员" value="Admin" />
             <el-option label="普通用户" value="User" />
           </el-select>
@@ -80,6 +84,14 @@
     <el-dialog title="权限管理" v-model="showPermissionDialog" width="600px">
       <div class="permission-header">
         <h4>为用户 "{{ selectedUser?.username }}" 分配权限</h4>
+        <div v-if="selectedUser?.role === 'Admin'" class="admin-notice">
+          <el-alert
+            title="管理员拥有所有模块的完整权限"
+            type="info"
+            :closable="false"
+            show-icon
+          />
+        </div>
       </div>
       <el-table :data="permissionList" border>
         <el-table-column prop="module" label="模块" width="150">
@@ -89,20 +101,29 @@
         </el-table-column>
         <el-table-column label="读取" width="80" align="center">
           <template #default="{ row }">
-            <el-checkbox v-model="row.can_read" />
+            <el-checkbox 
+              v-model="row.can_read" 
+              :disabled="selectedUser?.role === 'Admin'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="写入" width="80" align="center">
           <template #default="{ row }">
-            <el-checkbox v-model="row.can_write" />
+            <el-checkbox 
+              v-model="row.can_write" 
+              :disabled="selectedUser?.role === 'Admin'"
+            />
           </template>
         </el-table-column>
         <el-table-column label="删除" width="80" align="center">
           <template #default="{ row }">
-            <el-checkbox v-model="row.can_delete" />
+            <el-checkbox 
+              v-model="row.can_delete" 
+              :disabled="selectedUser?.role === 'Admin'"
+            />
           </template>
         </el-table-column>
-        <el-table-column label="操作" align="center">
+        <el-table-column label="操作" align="center" v-if="selectedUser?.role !== 'Admin'">
           <template #default="{ row }">
             <el-button size="small" @click="selectAllPermissions(row)">全选</el-button>
             <el-button size="small" @click="clearAllPermissions(row)">清空</el-button>
@@ -111,7 +132,14 @@
       </el-table>
       <template #footer>
         <el-button @click="showPermissionDialog = false">取消</el-button>
-        <el-button type="primary" @click="savePermissions" :loading="saving">保存权限</el-button>
+        <el-button 
+          type="primary" 
+          @click="savePermissions" 
+          :loading="saving"
+          v-if="selectedUser?.role !== 'Admin'"
+        >
+          保存权限
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -287,20 +315,30 @@ const managePermissions = async (user: User) => {
   selectedUser.value = user
   
   try {
-    // 获取用户当前权限
-    const response = await api.get(`/api/auth/users/${user.user_id}/permissions`)
-    const userPermissions = response.data
-    
-    // 初始化所有模块权限
-    permissionList.value = Object.keys(moduleNames).map(module => {
-      const existingPermission = userPermissions.find((p: any) => p.module === module)
-      return {
+    if (user.role === 'Admin') {
+      // 管理员显示所有权限为true
+      permissionList.value = Object.keys(moduleNames).map(module => ({
         module,
-        can_read: existingPermission?.can_read || false,
-        can_write: existingPermission?.can_write || false,
-        can_delete: existingPermission?.can_delete || false
-      }
-    })
+        can_read: true,
+        can_write: true,
+        can_delete: true
+      }))
+    } else {
+      // 普通用户获取实际权限
+      const response = await api.get(`/api/auth/users/${user.user_id}/permissions`)
+      const userPermissions = response.data
+      
+      // 初始化所有模块权限
+      permissionList.value = Object.keys(moduleNames).map(module => {
+        const existingPermission = userPermissions.find((p: any) => p.module === module)
+        return {
+          module,
+          can_read: existingPermission?.can_read || false,
+          can_write: existingPermission?.can_write || false,
+          can_delete: existingPermission?.can_delete || false
+        }
+      })
+    }
     
     showPermissionDialog.value = true
   } catch (error) {
@@ -377,5 +415,9 @@ onMounted(() => {
 .permission-header h4 {
   margin: 0;
   color: #606266;
+}
+
+.admin-notice {
+  margin-top: 15px;
 }
 </style>

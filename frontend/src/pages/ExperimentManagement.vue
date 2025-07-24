@@ -31,7 +31,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="person in dataStore.persons"
+            v-for="person in filteredPersonsForFilter"
             :key="person.person_id"
             :label="person.person_name"
             :value="person.person_id"
@@ -40,11 +40,18 @@
       </div>
       
       <div class="toolbar-right">
-        <el-button @click="handleExport">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('experiment_management', 'read')"
+          @click="handleExport"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('experiment_management', 'write')"
+          type="primary" 
+          @click="handleAdd"
+        >
           <el-icon><Plus /></el-icon>
           新建实验
         </el-button>
@@ -120,6 +127,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
+              :disabled="!authStore.hasModulePermission('experiment_management', 'write')"
               type="primary"
               size="small"
               @click="handleEdit(row)"
@@ -127,6 +135,7 @@
               编辑
             </el-button>
             <el-button
+              :disabled="!authStore.hasModulePermission('experiment_management', 'delete')"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -189,14 +198,14 @@
             collapse-tags-tooltip
           >
             <el-option
-              v-for="person in dataStore.persons"
+              v-for="person in filteredPersons"
               :key="person.person_id"
               :label="`${person.person_name} (ID: ${person.person_id})`"
               :value="person.person_id"
             />
           </el-select>
           <div class="form-tip">
-            可选择多个成员参与实验
+            {{ form.batch_id ? '显示该批次下的人员' : '请先选择批次' }}
           </div>
         </el-form-item>
         
@@ -221,14 +230,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Plus, Download, User, UserFilled } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type Experiment } from '../stores/data'
 import { ApiService } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
@@ -304,6 +315,42 @@ const paginatedExperiments = computed(() => {
 
 // 总数据量
 const total = computed(() => filteredExperiments.value.length)
+
+// 根据选择的批次过滤人员
+const filteredPersons = computed(() => {
+  if (!form.batch_id) {
+    return []
+  }
+  return dataStore.persons.filter(person => person.batch_id === form.batch_id)
+})
+
+// 监听批次选择变化，清空人员选择
+watch(() => form.batch_id, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    form.member_ids = []
+  }
+})
+
+// 根据选择的批次过滤人员（过滤区域）
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return dataStore.persons
+  }
+  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听过滤批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId && newBatchId) {
+    // 如果当前选择的人员不属于新批次，则清空人员过滤
+    if (filterPersonId.value) {
+      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
+      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
+        filterPersonId.value = undefined
+      }
+    }
+  }
+})
 
 // 获取批次号
 const getBatchNumber = (batchId: number): string => {
@@ -400,7 +447,15 @@ const handleAdd = () => {
 const handleEdit = (row: Experiment) => {
   isEdit.value = true
   dialogVisible.value = true
-  Object.assign(form, row)
+  
+  // 正确处理表单数据，特别是member_ids字段
+  Object.assign(form, {
+    experiment_id: row.experiment_id,
+    batch_id: row.batch_id,
+    experiment_content: row.experiment_content || '',
+    // 从members数组中提取person_id作为member_ids
+    member_ids: row.members ? row.members.map(member => member.person_id) : (row.member_ids || [])
+  })
 }
 
 // 删除实验

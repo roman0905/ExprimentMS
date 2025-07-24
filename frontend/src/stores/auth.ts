@@ -61,7 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   // 获取当前用户信息
-  const getCurrentUser = async () => {
+  const getCurrentUser = async (skipLogoutOnError = false) => {
     try {
       if (!token.value) return
       
@@ -74,9 +74,25 @@ export const useAuthStore = defineStore('auth', () => {
       userInfo.value = response.data
     } catch (error) {
       console.error('获取用户信息失败:', error)
-      // 如果获取用户信息失败，可能是token过期，执行登出
-      logout()
+      // 如果获取用户信息失败，可能是token过期
+      if (!skipLogoutOnError) {
+        logout()
+      }
+      throw error
     }
+  }
+
+  // 设置用户信息
+  const setUser = (user: any) => {
+    userInfo.value = user
+    isLoggedIn.value = true
+    localStorage.setItem('isLoggedIn', 'true')
+  }
+
+  // 设置token
+  const setToken = (newToken: string) => {
+    token.value = newToken
+    localStorage.setItem('token', newToken)
   }
 
   // 登出
@@ -147,8 +163,25 @@ export const useAuthStore = defineStore('auth', () => {
       token.value = storedToken
       isLoggedIn.value = true
       
-      // 尝试获取用户信息验证token有效性
-      await getCurrentUser()
+      try {
+         // 尝试获取用户信息验证token有效性（跳过自动登出避免循环调用）
+         await getCurrentUser(true)
+         
+         // 如果获取用户信息成功，确保登录状态正确
+         if (!userInfo.value) {
+           throw new Error('用户信息获取失败')
+         }
+       } catch (error) {
+         console.error('Token验证失败:', error)
+         // Token无效，清除所有认证状态
+         await logout()
+         throw error
+       }
+    } else {
+      // 没有有效的存储状态，确保清除所有状态
+      isLoggedIn.value = false
+      token.value = ''
+      userInfo.value = null
     }
   }
 
@@ -170,10 +203,17 @@ export const useAuthStore = defineStore('auth', () => {
     // 响应拦截器 - 处理401错误
     api.interceptors.response.use(
       (response) => response,
-      (error) => {
+      async (error) => {
         if (error.response?.status === 401) {
           // token过期或无效，执行登出
-          logout()
+          if (isLoggedIn.value) {
+            console.warn('Token已过期，自动登出')
+            await logout()
+            // 如果当前不在登录页，跳转到登录页
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login'
+            }
+          }
         }
         return Promise.reject(error)
       }
@@ -194,6 +234,8 @@ export const useAuthStore = defineStore('auth', () => {
     // 方法
     login,
     logout,
+    setUser,
+    setToken,
     getCurrentUser,
     hasModulePermission,
     hasAnyPermission,

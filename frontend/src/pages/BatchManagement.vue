@@ -22,11 +22,18 @@
       </div>
       
       <div class="toolbar-right">
-        <el-button @click="handleExport">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('batch_management', 'read')"
+          @click="handleExport"
+        >
           <el-icon><Download /></el-icon>
           导出数据
         </el-button>
-        <el-button type="primary" @click="handleAdd">
+        <el-button 
+          :disabled="!authStore.hasModulePermission('batch_management', 'write')"
+          type="primary" 
+          @click="handleAdd"
+        >
           <el-icon><Plus /></el-icon>
           新建批次
         </el-button>
@@ -65,6 +72,7 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button
+              :disabled="!authStore.hasModulePermission('batch_management', 'write')"
               type="primary"
               size="small"
               @click="handleEdit(row)"
@@ -72,6 +80,7 @@
               编辑
             </el-button>
             <el-button
+              :disabled="!authStore.hasModulePermission('batch_management', 'delete')"
               type="danger"
               size="small"
               @click="handleDelete(row)"
@@ -157,8 +166,10 @@ import { Search, Plus, Download } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type Batch } from '../stores/data'
 import { ApiService } from '../services/api'
+import { useAuthStore } from '../stores/auth'
 
 const dataStore = useDataStore()
+const authStore = useAuthStore()
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
@@ -316,10 +327,13 @@ const handleDelete = async (row: Batch) => {
       }
     )
     
-    dataStore.deleteBatch(row.batch_id)
+    await dataStore.deleteBatch(row.batch_id)
     ElMessage.success('删除成功')
-  } catch {
-    // 用户取消删除
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('Delete failed:', error)
+      ElMessage.error('删除失败')
+    }
   }
 }
 
@@ -327,28 +341,33 @@ const handleDelete = async (row: Batch) => {
 const handleSubmit = async () => {
   if (!formRef.value) return
   
-  await formRef.value.validate((valid) => {
+  await formRef.value.validate(async (valid) => {
     if (valid) {
-      if (isEdit.value) {
-        // 编辑
-        dataStore.updateBatch(form.batch_id, {
-          batch_number: form.batch_number,
-          start_time: form.start_time,
-          end_time: form.end_time || undefined
-        })
-        ElMessage.success('更新成功')
-      } else {
-        // 新建
-        dataStore.addBatch({
-          batch_number: form.batch_number,
-          start_time: form.start_time,
-          end_time: form.end_time || undefined
-        })
-        ElMessage.success('创建成功')
+      try {
+        if (isEdit.value) {
+          // 编辑
+          await dataStore.updateBatch(form.batch_id, {
+            batch_number: form.batch_number,
+            start_time: form.start_time,
+            end_time: form.end_time || undefined
+          })
+          ElMessage.success('更新成功')
+        } else {
+          // 新建
+          await dataStore.addBatch({
+            batch_number: form.batch_number,
+            start_time: form.start_time,
+            end_time: form.end_time || undefined
+          })
+          ElMessage.success('创建成功')
+        }
+        
+        dialogVisible.value = false
+        resetForm()
+      } catch (error) {
+        console.error('Submit failed:', error)
+        ElMessage.error(isEdit.value ? '更新失败' : '创建失败')
       }
-      
-      dialogVisible.value = false
-      resetForm()
     }
   })
 }

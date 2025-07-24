@@ -139,10 +139,49 @@ router.beforeEach(async (to, from, next) => {
     document.title = '实验数据管理系统'
   }
   
+  // 如果是登录页面，直接放行
+  if (to.path === '/login') {
+    // 如果已登录且访问登录页，重定向到首页
+    if (authStore.isLoggedIn) {
+      next('/dashboard')
+      return
+    }
+    next()
+    return
+  }
+  
   // 检查是否需要认证
   if (to.meta.requiresAuth !== false) {
-    if (!authStore.isLoggedIn) {
-      // 未登录，重定向到登录页
+    // 检查是否需要初始化认证状态
+    const storedToken = localStorage.getItem('token')
+    const storedIsLoggedIn = localStorage.getItem('isLoggedIn')
+    
+    // 如果有存储的认证信息但当前状态未初始化，需要先初始化
+    if (storedToken && storedIsLoggedIn === 'true' && !authStore.isLoggedIn) {
+      try {
+        // 等待认证状态初始化完成
+        await authStore.initAuth()
+        
+        // 初始化成功后，继续检查认证状态
+        if (!authStore.isLoggedIn) {
+          // 初始化后仍未登录，重定向到登录页
+          next({
+            path: '/login',
+            query: { redirect: to.fullPath }
+          })
+          return
+        }
+      } catch (error) {
+        console.error('认证状态初始化失败:', error)
+        // 初始化失败，重定向到登录页
+        next({
+          path: '/login',
+          query: { redirect: to.fullPath }
+        })
+        return
+      }
+    } else if (!authStore.isLoggedIn) {
+      // 没有存储的认证信息或认证状态为未登录，重定向到登录页
       next({
         path: '/login',
         query: { redirect: to.fullPath }
@@ -163,12 +202,6 @@ router.beforeEach(async (to, from, next) => {
         next('/dashboard')
         return
       }
-    }
-  } else {
-    // 如果已登录且访问登录页，重定向到首页
-    if (authStore.isLoggedIn && to.path === '/login') {
-      next('/dashboard')
-      return
     }
   }
   
