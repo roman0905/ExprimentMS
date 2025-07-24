@@ -57,6 +57,7 @@
           style="width: 120px"
           @change="handleFilter"
         >
+          <el-option label="未开始" value="not_started" />
           <el-option label="进行中" value="running" />
           <el-option label="已结束" value="finished" />
         </el-select>
@@ -90,6 +91,16 @@
         </div>
         <div class="stat-icon total">
           <el-icon><Monitor /></el-icon>
+        </div>
+      </el-card>
+      
+      <el-card class="stat-card">
+        <div class="stat-content">
+          <div class="stat-number">{{ notStartedSensors }}</div>
+          <div class="stat-label">未开始</div>
+        </div>
+        <div class="stat-icon not-started">
+          <el-icon><Clock /></el-icon>
         </div>
       </el-card>
       
@@ -152,7 +163,12 @@
         </el-table-column>
         <el-table-column prop="end_time" label="结束时间" width="180">
           <template #default="{ row }">
-            {{ row.end_time ? formatDateTime(row.end_time) : '进行中' }}
+            {{ row.end_time ? formatDateTime(row.end_time) : getSensorStatus(row).label }}
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="getSensorStatus(row).type">{{ getSensorStatus(row).label }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="150" fixed="right">
@@ -300,7 +316,8 @@ import {
   Plus,
   Monitor,
   CircleCheck,
-  CircleClose
+  CircleClose,
+  Clock
 } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { useDataStore, type Sensor, type Person, type Batch } from '../stores/data'
@@ -388,6 +405,21 @@ watch(() => form.batch_id, (newBatchId, oldBatchId) => {
   }
 })
 
+// 获取传感器状态
+const getSensorStatus = (sensor: Sensor) => {
+  const now = new Date()
+  const startTime = new Date(sensor.start_time)
+  const endTime = sensor.end_time ? new Date(sensor.end_time) : null
+  
+  if (endTime && now > endTime) {
+    return { type: 'info', label: '已结束' }
+  } else if (now >= startTime) {
+    return { type: 'success', label: '进行中' }
+  } else {
+    return { type: 'warning', label: '未开始' }
+  }
+}
+
 
 
 // 过滤后的传感器列表
@@ -410,10 +442,23 @@ const filteredSensors = computed(() => {
   }
   
   if (filterStatus.value) {
-    if (filterStatus.value === 'running') {
-      result = result.filter(sensor => !sensor.end_time)
+    const now = new Date()
+    if (filterStatus.value === 'not_started') {
+      result = result.filter(sensor => {
+        const startTime = new Date(sensor.start_time)
+        return now < startTime
+      })
+    } else if (filterStatus.value === 'running') {
+      result = result.filter(sensor => {
+        const startTime = new Date(sensor.start_time)
+        const endTime = sensor.end_time ? new Date(sensor.end_time) : null
+        return now >= startTime && (!endTime || now <= endTime)
+      })
     } else if (filterStatus.value === 'finished') {
-      result = result.filter(sensor => sensor.end_time)
+      result = result.filter(sensor => {
+        const endTime = sensor.end_time ? new Date(sensor.end_time) : null
+        return endTime && now > endTime
+      })
     }
   }
   
@@ -433,8 +478,28 @@ const total = computed(() => filteredSensors.value.length)
 
 // 统计数据
 const totalSensors = computed(() => dataStore.sensors.length)
-const runningSensors = computed(() => dataStore.sensors.filter(s => !s.end_time).length)
-const finishedSensors = computed(() => dataStore.sensors.filter(s => s.end_time).length)
+const notStartedSensors = computed(() => {
+  const now = new Date()
+  return dataStore.sensors.filter(sensor => {
+    const startTime = new Date(sensor.start_time)
+    return now < startTime
+  }).length
+})
+const runningSensors = computed(() => {
+  const now = new Date()
+  return dataStore.sensors.filter(sensor => {
+    const startTime = new Date(sensor.start_time)
+    const endTime = sensor.end_time ? new Date(sensor.end_time) : null
+    return now >= startTime && (!endTime || now <= endTime)
+  }).length
+})
+const finishedSensors = computed(() => {
+  const now = new Date()
+  return dataStore.sensors.filter(sensor => {
+    const endTime = sensor.end_time ? new Date(sensor.end_time) : null
+    return endTime && now > endTime
+  }).length
+})
 
 // 格式化日期时间
 const formatDateTime = (dateTime: string) => {
@@ -498,7 +563,8 @@ const handleExport = () => {
       '关联人员': getPersonName(sensor.person_id),
       '关联批次': getBatchNumber(sensor.batch_id),
       '开始时间': formatDateTime(sensor.start_time),
-      '结束时间': formatDateTime(sensor.end_time)
+      '结束时间': formatDateTime(sensor.end_time),
+      '状态': getSensorStatus(sensor).label
     }))
     
     // 创建工作簿
@@ -512,7 +578,8 @@ const handleExport = () => {
       { wch: 20 }, // 关联人员
       { wch: 15 }, // 关联批次
       { wch: 20 }, // 开始时间
-      { wch: 20 }  // 结束时间
+      { wch: 20 }, // 结束时间
+      { wch: 10 }  // 状态
     ]
     ws['!cols'] = colWidths
     
@@ -749,6 +816,10 @@ watch(() => filterBatch.value, (newBatchId, oldBatchId) => {
 
 .stat-icon.running {
   background: linear-gradient(135deg, #67C23A 0%, #85ce61 100%);
+}
+
+.stat-icon.not-started {
+  background: linear-gradient(135deg, #E6A23C 0%, #eebe77 100%);
 }
 
 .stat-icon.finished {

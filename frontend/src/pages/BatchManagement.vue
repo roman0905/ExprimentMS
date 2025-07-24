@@ -59,13 +59,13 @@
         <el-table-column prop="start_time" label="开始时间" min-width="180" />
         <el-table-column prop="end_time" label="结束时间" min-width="180">
           <template #default="{ row }">
-            {{ row.end_time || '进行中' }}
+            {{ row.end_time || getBatchStatus(row).label }}
           </template>
         </el-table-column>
         <el-table-column label="状态" min-width="100">
           <template #default="{ row }">
-            <el-tag :type="row.end_time ? 'info' : 'success'">
-              {{ row.end_time ? '已结束' : '进行中' }}
+            <el-tag :type="getBatchStatus(row).type">
+              {{ getBatchStatus(row).label }}
             </el-tag>
           </template>
         </el-table-column>
@@ -213,6 +213,21 @@ const rules = {
   ]
 }
 
+// 获取批次状态
+const getBatchStatus = (batch: Batch) => {
+  const now = new Date().getTime()
+  const startTime = new Date(batch.start_time).getTime()
+  const endTime = batch.end_time ? new Date(batch.end_time).getTime() : null
+  
+  if (now < startTime) {
+    return { type: 'warning', label: '未开始' }
+  } else if (endTime && now > endTime) {
+    return { type: 'info', label: '已结束' }
+  } else {
+    return { type: 'success', label: '进行中' }
+  }
+}
+
 // 过滤后的批次列表
 const filteredBatches = computed(() => {
   let result = dataStore.batches
@@ -267,7 +282,7 @@ const handleExport = () => {
       '批次号': batch.batch_number,
       '开始时间': batch.start_time,
       '结束时间': batch.end_time || '进行中',
-      '状态': batch.end_time ? '已结束' : '进行中'
+      '状态': getBatchStatus(batch).label
     }))
     
     // 创建工作簿

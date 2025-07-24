@@ -74,7 +74,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        path: 'competitor-data',
+        path: 'competitorData',
         name: 'CompetitorData',
         component: CompetitorData,
         meta: {
@@ -84,7 +84,7 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
-        path: 'finger-blood-data',
+        path: 'fingerBloodData',
         name: 'FingerBloodData',
         component: FingerBloodData,
         meta: {

@@ -81,7 +81,7 @@
             创建实验
           </el-button>
           
-          <el-button type="info" @click="$router.push('/finger-blood-data')">
+          <el-button type="info" @click="$router.push('/fingerBloodData')">
             <el-icon><DataLine /></el-icon>
             录入指尖血数据
           </el-button>

@@ -268,7 +268,8 @@ import {
   TooltipComponent,
   LegendComponent,
   GridComponent,
-  DataZoomComponent
+  DataZoomComponent,
+  MarkLineComponent
 } from 'echarts/components'
 import { useDataStore, type FingerBloodData } from '../stores/data'
 import { useAuthStore } from '../stores/auth'
@@ -282,7 +283,8 @@ use([
   TooltipComponent,
   LegendComponent,
   GridComponent,
-  DataZoomComponent
+  DataZoomComponent,
+  MarkLineComponent
 ])
 
 const dataStore = useDataStore()

@@ -48,7 +48,7 @@
           
           <el-menu-item 
             v-if="hasPermission('competitor_data')"
-            index="/competitor-data"
+            index="/competitorData"
           >
             <el-icon><Files /></el-icon>
             <template #title>竞品数据</template>
@@ -56,7 +56,7 @@
           
           <el-menu-item 
             v-if="hasPermission('finger_blood_data')"
-            index="/finger-blood-data"
+            index="/fingerBloodData"
           >
             <el-icon><TrendCharts /></el-icon>
             <template #title>指尖血数据</template>
