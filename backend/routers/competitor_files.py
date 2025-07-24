@@ -8,11 +8,13 @@ from datetime import datetime
 import pandas as pd
 import tempfile
 from database import get_db
-from models import CompetitorFile, Batch, Person
+from models import CompetitorFile, Batch, Person, User, ModuleEnum
 from schemas import CompetitorFileResponse, MessageResponse
 from routers.activities import log_activity
+from routers.auth import get_current_user, check_module_permission
+from utils import format_file_size
 
-router = APIRouter(prefix="/api/competitor-files", tags=["竞品数据管理"])
+router = APIRouter(prefix="/api/competitorFiles", tags=["竞品数据管理"])
 
 # 文件上传目录
 UPLOAD_DIR = "uploads/competitor_files"
@@ -24,7 +26,8 @@ def get_competitor_files(
     limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
     batch_id: Optional[int] = Query(None, description="按批次筛选"),
     person_id: Optional[int] = Query(None, description="按人员筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "read"))
 ):
     """获取竞品文件列表"""
     query = db.query(CompetitorFile).join(Batch).join(Person)
@@ -66,7 +69,8 @@ async def upload_competitor_file(
     batch_id: int = Form(...),
     person_id: int = Form(...),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "write"))
 ):
     """上传竞品文件"""
     # 验证批次和人员是否存在
@@ -123,7 +127,11 @@ async def upload_competitor_file(
     return result
 
 @router.get("/download/{file_id}")
-def download_competitor_file(file_id: int, db: Session = Depends(get_db)):
+def download_competitor_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "read"))
+):
     """下载竞品文件"""
     file_record = db.query(CompetitorFile).filter(CompetitorFile.competitor_file_id == file_id).first()
     if not file_record:
@@ -142,7 +150,12 @@ def download_competitor_file(file_id: int, db: Session = Depends(get_db)):
     )
 
 @router.put("/{file_id}/rename", response_model=CompetitorFileResponse)
-def rename_competitor_file(file_id: int, rename_data: dict, db: Session = Depends(get_db)):
+def rename_competitor_file(
+    file_id: int,
+    rename_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "write"))
+):
     """重命名竞品文件"""
     file_record = db.query(CompetitorFile).filter(CompetitorFile.competitor_file_id == file_id).first()
     if not file_record:
@@ -205,7 +218,11 @@ def rename_competitor_file(file_id: int, rename_data: dict, db: Session = Depend
     return result
 
 @router.delete("/{file_id}", response_model=MessageResponse)
-def delete_competitor_file(file_id: int, db: Session = Depends(get_db)):
+def delete_competitor_file(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "delete"))
+):
     """删除竞品文件"""
     file_record = db.query(CompetitorFile).filter(CompetitorFile.competitor_file_id == file_id).first()
     if not file_record:
@@ -228,7 +245,8 @@ def delete_competitor_file(file_id: int, db: Session = Depends(get_db)):
 def export_competitor_files(
     batch_id: Optional[int] = Query(None, description="按批次筛选"),
     person_id: Optional[int] = Query(None, description="按人员筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.COMPETITOR_DATA, "read"))
 ):
     """导出竞品文件数据为Excel"""
     query = db.query(CompetitorFile).join(Batch).join(Person)
@@ -253,16 +271,7 @@ def export_competitor_files(
                 file_size = None
         
         # 格式化文件大小
-        file_size_str = "未知大小"
-        if file_size is not None:
-            if file_size < 1024:
-                file_size_str = f"{file_size} B"
-            elif file_size < 1024 * 1024:
-                file_size_str = f"{file_size / 1024:.1f} KB"
-            elif file_size < 1024 * 1024 * 1024:
-                file_size_str = f"{file_size / (1024 * 1024):.1f} MB"
-            else:
-                file_size_str = f"{file_size / (1024 * 1024 * 1024):.1f} GB"
+        file_size_str = format_file_size(file_size)
         
         # 从文件路径获取文件名
         filename = os.path.basename(file.file_path) if file.file_path else "未知文件"

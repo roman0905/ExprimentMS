@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
-from models import Experiment, Batch, Person, ExperimentMember
+from models import Experiment, Batch, Person, ExperimentMember, User, ModuleEnum
 from schemas import ExperimentCreate, ExperimentUpdate, ExperimentResponse, MessageResponse, ExperimentMemberResponse
 from routers.activities import log_activity
+from routers.auth import get_current_user, check_module_permission
 
 router = APIRouter(prefix="/api/experiments", tags=["实验管理"])
 
@@ -14,7 +15,8 @@ def get_experiments(
     limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
     batch_id: Optional[int] = Query(None, description="按批次筛选"),
     person_id: Optional[int] = Query(None, description="按人员筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "read"))
 ):
     """获取实验列表"""
     query = db.query(Experiment).join(Batch)
@@ -55,7 +57,11 @@ def get_experiments(
     return result
 
 @router.post("/", response_model=ExperimentResponse)
-def create_experiment(experiment: ExperimentCreate, db: Session = Depends(get_db)):
+def create_experiment(
+    experiment: ExperimentCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "write"))
+):
     """创建新实验记录"""
     # 验证批次是否存在
     batch = db.query(Batch).filter(Batch.batch_id == experiment.batch_id).first()
@@ -127,7 +133,11 @@ def create_experiment(experiment: ExperimentCreate, db: Session = Depends(get_db
     return result
 
 @router.get("/{experiment_id}", response_model=ExperimentResponse)
-def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
+def get_experiment(
+    experiment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "read"))
+):
     """获取单个实验详情"""
     experiment = db.query(Experiment).filter(Experiment.experiment_id == experiment_id).first()
     if not experiment:
@@ -157,7 +167,12 @@ def get_experiment(experiment_id: int, db: Session = Depends(get_db)):
     return result
 
 @router.put("/{experiment_id}", response_model=ExperimentResponse)
-def update_experiment(experiment_id: int, experiment: ExperimentUpdate, db: Session = Depends(get_db)):
+def update_experiment(
+    experiment_id: int,
+    experiment: ExperimentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "write"))
+):
     """更新实验信息"""
     db_experiment = db.query(Experiment).filter(Experiment.experiment_id == experiment_id).first()
     if not db_experiment:
@@ -221,7 +236,11 @@ def update_experiment(experiment_id: int, experiment: ExperimentUpdate, db: Sess
     return result
 
 @router.delete("/{experiment_id}", response_model=MessageResponse)
-def delete_experiment(experiment_id: int, db: Session = Depends(get_db)):
+def delete_experiment(
+    experiment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "write"))
+):
     """删除实验记录"""
     db_experiment = db.query(Experiment).filter(Experiment.experiment_id == experiment_id).first()
     if not db_experiment:
@@ -236,7 +255,12 @@ def delete_experiment(experiment_id: int, db: Session = Depends(get_db)):
     return MessageResponse(message="实验记录删除成功")
 
 @router.post("/{experiment_id}/members", response_model=MessageResponse)
-def add_experiment_member(experiment_id: int, person_id: int, db: Session = Depends(get_db)):
+def add_experiment_member(
+    experiment_id: int,
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "write"))
+):
     """为实验添加成员"""
     # 验证实验是否存在
     experiment = db.query(Experiment).filter(Experiment.experiment_id == experiment_id).first()
@@ -270,7 +294,12 @@ def add_experiment_member(experiment_id: int, person_id: int, db: Session = Depe
     return MessageResponse(message=f"成功添加成员 {person.person_name}")
 
 @router.delete("/{experiment_id}/members/{person_id}", response_model=MessageResponse)
-def remove_experiment_member(experiment_id: int, person_id: int, db: Session = Depends(get_db)):
+def remove_experiment_member(
+    experiment_id: int,
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.EXPERIMENT_MANAGEMENT, "write"))
+):
     """从实验中移除成员"""
     # 验证实验是否存在
     experiment = db.query(Experiment).filter(Experiment.experiment_id == experiment_id).first()

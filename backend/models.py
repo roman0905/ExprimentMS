@@ -22,7 +22,6 @@ class ModuleEnum(enum.Enum):
     COMPETITOR_DATA = "competitor_data"
     FINGER_BLOOD_DATA = "finger_blood_data"
     SENSOR_DATA = "sensor_data"
-    USER_MANAGEMENT = "user_management"
 
 class Batch(Base):
     __tablename__ = "batches"

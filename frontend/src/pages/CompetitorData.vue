@@ -16,7 +16,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="batch in dataStore.batches"
+            v-for="batch in availableBatchesForFilter"
             :key="batch.batch_id"
             :label="batch.batch_number"
             :value="batch.batch_id"
@@ -274,10 +274,13 @@ import {
   UploadFilled,
   Edit
 } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import { useDataStore, type CompetitorFile } from '../stores/data'
 import { useAuthStore } from '../stores/auth'
 import { ApiService } from '../services/api'
+import { usePagination } from '../composables/usePagination'
+
+import { getBatchNumber, getPersonName, formatFileSize } from '../utils/formatters'
+import { exportToExcel } from '../utils/excel'
 
 const dataStore = useDataStore()
 const authStore = useAuthStore()
@@ -286,11 +289,20 @@ const authStore = useAuthStore()
 onMounted(async () => {
   try {
     loading.value = true
-    const competitorFilesData = await ApiService.getCompetitorFiles()
+    // 并行加载所有必要的数据
+    const [competitorFilesData, batchesData, personsData] = await Promise.all([
+      ApiService.getCompetitorFiles(),
+      ApiService.getBatches(),
+      ApiService.getPersons()
+    ])
+    
+    // 更新数据存储
     dataStore.competitorFiles = competitorFilesData
+    dataStore.batches = batchesData
+    dataStore.persons = personsData
   } catch (error) {
-    console.error('Failed to load competitor files:', error)
-    ElMessage.error('加载竞品文件数据失败')
+    console.error('Failed to load data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
@@ -300,21 +312,46 @@ const loading = ref(false)
 const uploading = ref(false)
 const exporting = ref(false)
 const renaming = ref(false)
-const filterBatchId = ref<number | undefined>()
-const filterPersonId = ref<number | undefined>()
 const uploadDialogVisible = ref(false)
 const renameDialogVisible = ref(false)
 const uploadFormRef = ref<FormInstance>()
 const renameFormRef = ref<FormInstance>()
 const uploadRef = ref()
-const fileList = ref<UploadFile[]>([])
+const fileList = ref<UploadFile[]>()
 const currentFileName = ref('')
 const currentFileId = ref<number | null>(null)
 
-// 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
-const pageSizes = [10, 20, 50, 100]
+// 筛选相关
+const filterBatchId = ref<number | undefined>()
+const filterPersonId = ref<number | undefined>()
+
+// 根据竞品文件数据中实际存在的批次进行筛选
+const availableBatchesForFilter = computed(() => {
+  const batchIds = [...new Set(dataStore.competitorFiles.map(file => file.batch_id))]
+  return dataStore.batches.filter(batch => batchIds.includes(batch.batch_id))
+})
+
+// 根据竞品文件数据中实际存在的人员进行筛选
+const availablePersonsForFilter = computed(() => {
+  const personIds = [...new Set(dataStore.competitorFiles.map(file => file.person_id))]
+  return dataStore.persons.filter(person => personIds.includes(person.person_id))
+})
+
+// 根据选择的批次过滤人员
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return availablePersonsForFilter.value
+  }
+  return availablePersonsForFilter.value.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    filterPersonId.value = undefined
+    resetPagination()
+  }
+})
 
 const uploadForm = reactive({
   batch_id: undefined as number | undefined,
@@ -365,26 +402,7 @@ watch(() => uploadForm.batch_id, (newBatchId, oldBatchId) => {
   }
 })
 
-// 根据选择的批次过滤人员（过滤区域）
-const filteredPersonsForFilter = computed(() => {
-  if (!filterBatchId.value) {
-    return dataStore.persons
-  }
-  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
-})
 
-// 监听过滤批次选择变化，清空人员过滤
-watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
-  if (newBatchId !== oldBatchId && newBatchId) {
-    // 如果当前选择的人员不属于新批次，则清空人员过滤
-    if (filterPersonId.value) {
-      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
-      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
-        filterPersonId.value = undefined
-      }
-    }
-  }
-})
 
 // 过滤后的文件列表
 const filteredFiles = computed(() => {
@@ -402,27 +420,30 @@ const filteredFiles = computed(() => {
   return result.sort((a, b) => b.competitor_file_id - a.competitor_file_id)
 })
 
-// 当前页数据
+// 分页逻辑
+const {
+  currentPage,
+  pageSize,
+  pageSizes,
+  total,
+  handleSizeChange,
+  handleCurrentChange,
+  resetPagination
+} = usePagination()
+
+// 分页数据计算
 const paginatedFiles = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   return filteredFiles.value.slice(start, end)
 })
 
-// 总数据量
-const total = computed(() => filteredFiles.value.length)
+// 监听过滤结果变化，更新总数
+watch(filteredFiles, (newVal) => {
+  total.value = newVal.length
+}, { immediate: true })
 
-// 获取批次号
-const getBatchNumber = (batchId: number): string => {
-  const batch = dataStore.batches.find(b => b.batch_id === batchId)
-  return batch?.batch_number || '未知批次'
-}
 
-// 获取人员姓名
-const getPersonName = (personId: number): string => {
-  const person = dataStore.persons.find(p => p.person_id === personId)
-  return person ? `${person.person_name} (ID: ${person.person_id})` : '未知人员'
-}
 
 // 从文件路径获取文件名
 const getFileName = (filePath: string): string => {
@@ -431,41 +452,12 @@ const getFileName = (filePath: string): string => {
   return parts[parts.length - 1] || '未知文件'
 }
 
-// 格式化文件大小
-const formatFileSize = (bytes: number | null | undefined): string => {
-  if (!bytes || bytes === 0) return '未知大小'
-  
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let size = bytes
-  let unitIndex = 0
-  
-  while (size >= 1024 && unitIndex < units.length - 1) {
-    size /= 1024
-    unitIndex++
-  }
-  
-  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
-}
-
 // 获取文件大小
 const getFileSize = (row: CompetitorFile): string => {
   return formatFileSize(row.file_size)
 }
 
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
 
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页
-const resetPagination = () => {
-  currentPage.value = 1
-}
 
 // 筛选处理
 const handleFilter = () => {
@@ -610,11 +602,8 @@ const handleDelete = async (row: CompetitorFile) => {
       }
     )
     
-    // 调用API删除文件
-    await ApiService.deleteCompetitorFile(row.competitor_file_id)
-    
-    // 更新本地数据
-    dataStore.deleteCompetitorFile(row.competitor_file_id)
+    // 调用 dataStore 删除文件
+    await dataStore.deleteCompetitorFile(row.competitor_file_id)
     ElMessage.success('删除成功')
   } catch (error) {
     if (error !== 'cancel') {
@@ -638,26 +627,8 @@ const handleExport = () => {
       '文件大小': getFileSize(item)
     }))
 
-    // 创建工作簿和工作表
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    ws['!cols'] = [
-      { wch: 10 }, // 文件ID
-      { wch: 30 }, // 文件名
-      { wch: 20 }, // 关联批次
-      { wch: 25 }, // 关联人员
-      { wch: 15 }  // 文件大小
-    ]
-    
-    // 添加工作表到工作簿
-    XLSX.utils.book_append_sheet(wb, ws, '竞品数据')
-    
     // 生成文件名
-    const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
-    let filename = `竞品数据_${timestamp}.xlsx`
+    let filename = '竞品数据'
     
     // 如果有筛选条件，添加到文件名中
     if (filterBatchId.value || filterPersonId.value) {
@@ -670,11 +641,17 @@ const handleExport = () => {
         const personName = getPersonName(filterPersonId.value).split(' ')[0]
         filters.push(`人员${personName}`)
       }
-      filename = `竞品数据_${filters.join('_')}_${timestamp}.xlsx`
+      filename = `竞品数据_${filters.join('_')}`
     }
     
     // 导出文件
-    XLSX.writeFile(wb, filename)
+    exportToExcel(exportData, filename, {
+      '文件ID': 10,
+      '文件名': 30,
+      '关联批次': 20,
+      '关联人员': 25,
+      '文件大小': 15
+    })
     
     ElMessage.success('数据导出成功')
   } catch (error) {

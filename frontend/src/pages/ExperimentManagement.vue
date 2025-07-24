@@ -16,7 +16,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="batch in dataStore.batches"
+            v-for="batch in availableBatchesForFilter"
             :key="batch.batch_id"
             :label="batch.batch_number"
             :value="batch.batch_id"
@@ -33,7 +33,7 @@
           <el-option
             v-for="person in filteredPersonsForFilter"
             :key="person.person_id"
-            :label="person.person_name"
+            :label="`${person.person_name} (ID: ${person.person_id})`"
             :value="person.person_id"
           />
         </el-select>
@@ -96,11 +96,11 @@
                       <span class="member-id">ID: {{ member.person_id }}</span>
                     </div>
                     <el-tag 
-                      :type="index === 0 ? 'warning' : 'info'" 
+                      type="info" 
                       size="small"
                       class="member-role"
                     >
-                      {{ index === 0 ? '组长' : '成员' }}
+                      成员
                     </el-tag>
                   </div>
                 </div>
@@ -233,10 +233,13 @@
 import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Plus, Download, User, UserFilled } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import { useDataStore, type Experiment } from '../stores/data'
 import { ApiService } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { usePagination } from '@/composables/usePagination'
+
+import { getBatchNumber, getPersonName, formatDateTime } from '@/utils/formatters'
+import { exportToExcel } from '@/utils/excel'
 
 const dataStore = useDataStore()
 const authStore = useAuthStore()
@@ -245,27 +248,68 @@ const authStore = useAuthStore()
 onMounted(async () => {
   try {
     loading.value = true
-    const experimentsData = await ApiService.getExperiments()
+    // 并行加载所有必要的数据
+    const [experimentsData, batchesData, personsData] = await Promise.all([
+      ApiService.getExperiments(),
+      ApiService.getBatches(),
+      ApiService.getPersons()
+    ])
+    
     dataStore.experiments = experimentsData
+    dataStore.batches = batchesData
+    dataStore.persons = personsData
   } catch (error) {
-    console.error('Failed to load experiments:', error)
-    ElMessage.error('加载实验数据失败')
+    console.error('Failed to load data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 })
 
 const loading = ref(false)
-const filterBatchId = ref<number | undefined>()
-const filterPersonId = ref<number | undefined>()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
 
 // 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
-const pageSizes = [10, 20, 50, 100]
+const { currentPage, pageSize, pageSizes, handleSizeChange, handleCurrentChange, resetPagination } = usePagination()
+
+// 筛选相关
+const filterBatchId = ref<number | undefined>()
+const filterPersonId = ref<number | undefined>()
+
+// 根据实验数据中实际存在的批次进行筛选
+const availableBatchesForFilter = computed(() => {
+  const batchIds = [...new Set(dataStore.experiments.map(exp => exp.batch_id))]
+  return dataStore.batches.filter(batch => batchIds.includes(batch.batch_id))
+})
+
+// 根据实验数据中实际存在的人员进行筛选
+const availablePersonsForFilter = computed(() => {
+  const personIds = new Set<number>()
+  dataStore.experiments.forEach(exp => {
+    if (exp.members) {
+      exp.members.forEach(member => personIds.add(member.person_id))
+    }
+  })
+  return dataStore.persons.filter(person => personIds.has(person.person_id))
+})
+
+// 根据选择的批次过滤人员
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return availablePersonsForFilter.value
+  }
+  return availablePersonsForFilter.value.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    filterPersonId.value = undefined
+    resetPagination()
+  }
+})
 
 const form = reactive({
   experiment_id: 0,
@@ -283,8 +327,7 @@ const rules = {
     { type: 'array', min: 1, message: '请至少选择一个实验成员', trigger: 'change' }
   ],
   experiment_content: [
-    { required: true, message: '请输入实验内容', trigger: 'blur' },
-    { min: 5, max: 500, message: '实验内容长度在 5 到 500 个字符', trigger: 'blur' }
+    { max: 500, message: '实验内容长度不能超过 500 个字符', trigger: 'blur' }
   ]
 }
 
@@ -331,59 +374,11 @@ watch(() => form.batch_id, (newBatchId, oldBatchId) => {
   }
 })
 
-// 根据选择的批次过滤人员（过滤区域）
-const filteredPersonsForFilter = computed(() => {
-  if (!filterBatchId.value) {
-    return dataStore.persons
-  }
-  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
-})
 
-// 监听过滤批次选择变化，清空人员过滤
-watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
-  if (newBatchId !== oldBatchId && newBatchId) {
-    // 如果当前选择的人员不属于新批次，则清空人员过滤
-    if (filterPersonId.value) {
-      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
-      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
-        filterPersonId.value = undefined
-      }
-    }
-  }
-})
 
-// 获取批次号
-const getBatchNumber = (batchId: number): string => {
-  const batch = dataStore.batches.find(b => b.batch_id === batchId)
-  return batch?.batch_number || '未知批次'
-}
 
-// 格式化日期时间
-const formatDateTime = (dateTime?: string): string => {
-  if (!dateTime) return '暂无'
-  return new Date(dateTime).toLocaleString('zh-CN')
-}
 
-// 获取人员姓名
-const getPersonName = (personId: number): string => {
-  const person = dataStore.persons.find(p => p.person_id === personId)
-  return person?.person_name || '未知人员'
-}
 
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
-
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页
-const resetPagination = () => {
-  currentPage.value = 1
-}
 
 // 筛选处理
 const handleFilter = () => {
@@ -404,31 +399,7 @@ const handleExport = () => {
       '创建时间': formatDateTime(experiment.created_time)
     }))
     
-    // 创建工作簿
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    const colWidths = [
-      { wch: 10 }, // 实验ID
-      { wch: 15 }, // 批次号
-      { wch: 30 }, // 实验成员
-      { wch: 10 }, // 成员数量
-      { wch: 40 }, // 实验内容
-      { wch: 20 }  // 创建时间
-    ]
-    ws['!cols'] = colWidths
-    
-    XLSX.utils.book_append_sheet(wb, ws, '实验数据')
-    
-    // 生成文件名
-    const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
-    const filename = `实验数据_${timestamp}.xlsx`
-    
-    // 导出文件
-    XLSX.writeFile(wb, filename)
-    
+    exportToExcel(exportData, '实验数据')
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('Export failed:', error)

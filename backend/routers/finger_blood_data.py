@@ -8,11 +8,13 @@ import tempfile
 import os
 
 from database import get_db
-from models import FingerBloodFile, Batch, Person
+from models import FingerBloodFile, Batch, Person, User
 from schemas import FingerBloodDataResponse, FingerBloodDataCreate, FingerBloodDataUpdate, MessageResponse
 from routers.activities import log_activity
+from routers.auth import get_current_user, check_module_permission
+from models import ModuleEnum
 
-router = APIRouter(prefix="/api/finger-blood-data", tags=["指尖血数据管理"])
+router = APIRouter(prefix="/api/fingerBloodData", tags=["指尖血数据管理"])
 
 @router.get("/", response_model=List[FingerBloodDataResponse])
 def get_finger_blood_data(
@@ -22,7 +24,8 @@ def get_finger_blood_data(
     person_id: Optional[int] = Query(None, description="按人员筛选"),
     start_time: Optional[datetime] = Query(None, description="开始时间筛选"),
     end_time: Optional[datetime] = Query(None, description="结束时间筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "read"))
 ):
     """获取指尖血数据列表"""
     query = db.query(FingerBloodFile).join(Batch).join(Person)
@@ -58,7 +61,11 @@ def get_finger_blood_data(
     return result
 
 @router.post("/", response_model=FingerBloodDataResponse)
-def create_finger_blood_data(data: FingerBloodDataCreate, db: Session = Depends(get_db)):
+def create_finger_blood_data(
+    data: FingerBloodDataCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "write"))
+):
     """新增指尖血数据"""
     # 验证批次和人员是否存在
     batch = db.query(Batch).filter(Batch.batch_id == data.batch_id).first()
@@ -87,7 +94,11 @@ def create_finger_blood_data(data: FingerBloodDataCreate, db: Session = Depends(
     return result
 
 @router.get("/{data_id}", response_model=FingerBloodDataResponse)
-def get_finger_blood_data_item(data_id: int, db: Session = Depends(get_db)):
+def get_finger_blood_data_item(
+    data_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "read"))
+):
     """获取单条指尖血数据详情"""
     data = db.query(FingerBloodFile).filter(FingerBloodFile.finger_blood_file_id == data_id).first()
     if not data:
@@ -106,7 +117,12 @@ def get_finger_blood_data_item(data_id: int, db: Session = Depends(get_db)):
     return result
 
 @router.put("/{data_id}", response_model=FingerBloodDataResponse)
-def update_finger_blood_data(data_id: int, data: FingerBloodDataUpdate, db: Session = Depends(get_db)):
+def update_finger_blood_data(
+    data_id: int,
+    data: FingerBloodDataUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "write"))
+):
     """更新指尖血数据"""
     db_data = db.query(FingerBloodFile).filter(FingerBloodFile.finger_blood_file_id == data_id).first()
     if not db_data:
@@ -140,7 +156,11 @@ def update_finger_blood_data(data_id: int, data: FingerBloodDataUpdate, db: Sess
     return result
 
 @router.delete("/{data_id}", response_model=MessageResponse)
-def delete_finger_blood_data(data_id: int, db: Session = Depends(get_db)):
+def delete_finger_blood_data(
+    data_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "delete"))
+):
     """删除指尖血数据"""
     db_data = db.query(FingerBloodFile).filter(FingerBloodFile.finger_blood_file_id == data_id).first()
     if not db_data:
@@ -156,7 +176,8 @@ def export_finger_blood_data(
     person_id: Optional[int] = Query(None, description="按人员筛选"),
     start_time: Optional[datetime] = Query(None, description="开始时间筛选"),
     end_time: Optional[datetime] = Query(None, description="结束时间筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.FINGER_BLOOD_DATA, "read"))
 ):
     """导出指尖血数据为Excel文件"""
     try:

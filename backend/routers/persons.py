@@ -2,13 +2,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from database import get_db
-from models import Person, Batch
+from models import Person, Batch, User
 from schemas import PersonCreate, PersonUpdate, PersonResponse, MessageResponse, BatchResponse
+from routers.auth import get_current_user, check_module_permission
+from models import ModuleEnum
 
 router = APIRouter(prefix="/api/persons", tags=["人员管理"])
 
 @router.get("/batches", response_model=List[BatchResponse])
-def get_batches_for_person(db: Session = Depends(get_db)):
+def get_batches_for_person(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "read"))
+):
     """获取可选择的批次列表"""
     batches = db.query(Batch).all()
     return batches
@@ -18,7 +23,8 @@ def get_persons(
     skip: int = Query(0, ge=0, description="跳过的记录数"),
     limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
     search: Optional[str] = Query(None, description="按姓名搜索"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "read"))
 ):
     """获取人员列表"""
     query = db.query(Person).options(joinedload(Person.batch))
@@ -44,7 +50,11 @@ def get_persons(
     return result
 
 @router.post("/", response_model=PersonResponse)
-def create_person(person: PersonCreate, db: Session = Depends(get_db)):
+def create_person(
+    person: PersonCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "write"))
+):
     """添加新人员"""
     db_person = Person(**person.dict())
     db.add(db_person)
@@ -53,7 +63,11 @@ def create_person(person: PersonCreate, db: Session = Depends(get_db)):
     return db_person
 
 @router.get("/{person_id}", response_model=PersonResponse)
-def get_person(person_id: int, db: Session = Depends(get_db)):
+def get_person(
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "read"))
+):
     """获取单个人员详情"""
     person = db.query(Person).filter(Person.person_id == person_id).first()
     if not person:
@@ -61,7 +75,12 @@ def get_person(person_id: int, db: Session = Depends(get_db)):
     return person
 
 @router.put("/{person_id}", response_model=PersonResponse)
-def update_person(person_id: int, person: PersonUpdate, db: Session = Depends(get_db)):
+def update_person(
+    person_id: int,
+    person: PersonUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "write"))
+):
     """更新人员信息"""
     db_person = db.query(Person).filter(Person.person_id == person_id).first()
     if not db_person:
@@ -75,7 +94,11 @@ def update_person(person_id: int, person: PersonUpdate, db: Session = Depends(ge
     return db_person
 
 @router.delete("/{person_id}", response_model=MessageResponse)
-def delete_person(person_id: int, db: Session = Depends(get_db)):
+def delete_person(
+    person_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.PERSON_MANAGEMENT, "delete"))
+):
     """删除人员"""
     db_person = db.query(Person).filter(Person.person_id == person_id).first()
     if not db_person:

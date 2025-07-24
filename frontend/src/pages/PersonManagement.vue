@@ -181,13 +181,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Plus, Download } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import { useDataStore, type Person } from '../stores/data'
 import { ApiService } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { usePagination } from '@/composables/usePagination'
+import { useSearch } from '@/composables/useFilter'
+import { getBatchNumber, formatDateTime } from '@/utils/formatters'
+import { exportToExcel } from '@/utils/excel'
 
 const dataStore = useDataStore()
 const authStore = useAuthStore()
@@ -212,16 +215,26 @@ onMounted(async () => {
 })
 
 const loading = ref(false)
-const searchText = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
+const currentPersonId = ref<number | null>(null)
 const formRef = ref<FormInstance>()
 const batches = ref<any[]>([])
 
 // 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
-const pageSizes = [10, 20, 50, 100]
+const {
+  currentPage,
+  pageSize,
+  pageSizes,
+  total,
+  handleSizeChange,
+  handleCurrentChange,
+  resetPagination
+} = usePagination()
+
+// 搜索相关
+const { searchKeyword, handleSearch } = useSearch(resetPagination)
+const searchText = searchKeyword
 
 const form = reactive({
   person_id: 0,
@@ -268,31 +281,14 @@ const paginatedPersons = computed(() => {
   return filteredPersons.value.slice(start, end)
 })
 
-// 总数据量
-const total = computed(() => filteredPersons.value.length)
+// 监听过滤结果变化，更新总数
+watch(filteredPersons, (newVal) => {
+  total.value = newVal.length
+}, { immediate: true })
 
 
 
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
 
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页
-const resetPagination = () => {
-  currentPage.value = 1
-}
-
-// 搜索处理
-const handleSearch = () => {
-  // 搜索逻辑已在computed中处理
-  resetPagination()
-}
 
 // 导出数据
 const handleExport = () => {
@@ -306,30 +302,7 @@ const handleExport = () => {
       '所属批次': person.batch_number || '未分配'
     }))
     
-    // 创建工作簿
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    const colWidths = [
-      { wch: 10 }, // 人员ID
-      { wch: 15 }, // 姓名
-      { wch: 8 },  // 性别
-      { wch: 8 },  // 年龄
-      { wch: 15 }  // 所属批次
-    ]
-    ws['!cols'] = colWidths
-    
-    XLSX.utils.book_append_sheet(wb, ws, '人员数据')
-    
-    // 生成文件名
-    const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
-    const filename = `人员数据_${timestamp}.xlsx`
-    
-    // 导出文件
-    XLSX.writeFile(wb, filename)
-    
+    exportToExcel(exportData, '人员数据')
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('Export failed:', error)

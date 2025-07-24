@@ -99,7 +99,16 @@
             {{ getModuleName(row.module) }}
           </template>
         </el-table-column>
-        <el-table-column label="读取" width="80" align="center">
+        <el-table-column label="读取" width="100" align="center">
+          <template #header>
+            <div class="column-header">
+              <span class="column-title">读取</span>
+              <div class="column-actions" v-if="selectedUser?.role !== 'Admin'">
+                <el-button size="small" @click="selectAllColumn('can_read')" title="全选读取权限">全选</el-button>
+                <el-button size="small" @click="clearAllColumn('can_read')" title="清空读取权限">清空</el-button>
+              </div>
+            </div>
+          </template>
           <template #default="{ row }">
             <el-checkbox 
               v-model="row.can_read" 
@@ -107,7 +116,16 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="写入" width="80" align="center">
+        <el-table-column label="写入" width="100" align="center">
+          <template #header>
+            <div class="column-header">
+              <span class="column-title">写入</span>
+              <div class="column-actions" v-if="selectedUser?.role !== 'Admin'">
+                <el-button size="small" @click="selectAllColumn('can_write')" title="全选写入权限">全选</el-button>
+                <el-button size="small" @click="clearAllColumn('can_write')" title="清空写入权限">清空</el-button>
+              </div>
+            </div>
+          </template>
           <template #default="{ row }">
             <el-checkbox 
               v-model="row.can_write" 
@@ -115,7 +133,16 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="删除" width="80" align="center">
+        <el-table-column label="删除" width="100" align="center">
+          <template #header>
+            <div class="column-header">
+              <span class="column-title">删除</span>
+              <div class="column-actions" v-if="selectedUser?.role !== 'Admin'">
+                <el-button size="small" @click="selectAllColumn('can_delete')" title="全选删除权限">全选</el-button>
+                <el-button size="small" @click="clearAllColumn('can_delete')" title="清空删除权限">清空</el-button>
+              </div>
+            </div>
+          </template>
           <template #default="{ row }">
             <el-checkbox 
               v-model="row.can_delete" 
@@ -125,8 +152,10 @@
         </el-table-column>
         <el-table-column label="操作" align="center" v-if="selectedUser?.role !== 'Admin'">
           <template #default="{ row }">
-            <el-button size="small" @click="selectAllPermissions(row)">全选</el-button>
-            <el-button size="small" @click="clearAllPermissions(row)">清空</el-button>
+            <div class="row-actions">
+              <el-button size="small" @click="selectAllPermissions(row)">全选</el-button>
+              <el-button size="small" @click="clearAllPermissions(row)">清空</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -206,8 +235,7 @@ const moduleNames = {
   'experiment_management': '实验管理',
   'competitor_data': '竞品数据',
   'finger_blood_data': '指尖血数据',
-  'sensor_data': '传感器数据',
-  'user_management': '用户管理'
+  'sensor_data': '传感器数据'
 }
 
 const getModuleName = (module: string) => {
@@ -359,6 +387,20 @@ const clearAllPermissions = (permission: Permission) => {
   permission.can_delete = false
 }
 
+// 列全选功能
+const selectAllColumn = (columnType: 'can_read' | 'can_write' | 'can_delete') => {
+  permissionList.value.forEach(permission => {
+    permission[columnType] = true
+  })
+}
+
+// 列清空功能
+const clearAllColumn = (columnType: 'can_read' | 'can_write' | 'can_delete') => {
+  permissionList.value.forEach(permission => {
+    permission[columnType] = false
+  })
+}
+
 const savePermissions = async () => {
   if (!selectedUser.value) return
   
@@ -419,5 +461,47 @@ onMounted(() => {
 
 .admin-notice {
   margin-top: 15px;
+}
+
+.column-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.column-header .column-title {
+  margin-bottom: 2px;
+}
+
+.column-title {
+  font-weight: 600;
+  color: #303133;
+}
+
+.column-actions {
+  display: flex;
+  flex-direction: row;
+  gap: 4px;
+  justify-content: center;
+}
+
+.column-actions .el-button {
+  padding: 2px 6px;
+  font-size: 11px;
+  height: 22px;
+  min-height: 22px;
+  border-radius: 4px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  align-items: center;
+}
+
+.row-actions .el-button {
+  margin: 0;
 }
 </style>

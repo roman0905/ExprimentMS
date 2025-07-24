@@ -16,7 +16,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="batch in dataStore.batches"
+            v-for="batch in availableBatchesForFilter"
             :key="batch.batch_id"
             :label="batch.batch_number"
             :value="batch.batch_id"
@@ -258,7 +258,6 @@
 import { ref, computed, reactive, watch, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { TrendCharts, Plus, Download } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -274,6 +273,10 @@ import {
 import { useDataStore, type FingerBloodData } from '../stores/data'
 import { useAuthStore } from '../stores/auth'
 import { ApiService } from '../services/api'
+import { usePagination } from '@/composables/usePagination'
+
+import { getBatchNumber, getPersonName, formatDateTime } from '@/utils/formatters'
+import { exportToExcel } from '@/utils/excel'
 
 // 注册ECharts组件
 use([
@@ -297,27 +300,64 @@ const exportLoading = ref(false)
 onMounted(async () => {
   try {
     loading.value = true
-    const fingerBloodDataData = await ApiService.getFingerBloodData()
+    // 并行加载所有必要的数据
+    const [fingerBloodDataData, batchesData, personsData] = await Promise.all([
+      ApiService.getFingerBloodData(),
+      ApiService.getBatches(),
+      ApiService.getPersons()
+    ])
+    
     dataStore.fingerBloodData = fingerBloodDataData
+    dataStore.batches = batchesData
+    dataStore.persons = personsData
   } catch (error) {
-    console.error('Failed to load finger blood data:', error)
-    ElMessage.error('加载血糖数据失败')
+    console.error('Failed to load data:', error)
+    ElMessage.error('加载数据失败')
   } finally {
     loading.value = false
   }
 })
 const chartLoading = ref(false)
 const showChart = ref(true)
+
+// 筛选相关
 const filterBatchId = ref<number | undefined>()
 const filterPersonId = ref<number | undefined>()
+
+// 根据指尖血数据中实际存在的批次进行筛选
+const availableBatchesForFilter = computed(() => {
+  const batchIds = [...new Set(dataStore.fingerBloodData.map(data => data.batch_id))]
+  return dataStore.batches.filter(batch => batchIds.includes(batch.batch_id))
+})
+
+// 根据指尖血数据中实际存在的人员进行筛选
+const availablePersonsForFilter = computed(() => {
+  const personIds = [...new Set(dataStore.fingerBloodData.map(data => data.person_id))]
+  return dataStore.persons.filter(person => personIds.includes(person.person_id))
+})
+
+// 根据选择的批次过滤人员
+const filteredPersonsForFilter = computed(() => {
+  if (!filterBatchId.value) {
+    return availablePersonsForFilter.value
+  }
+  return availablePersonsForFilter.value.filter(person => person.batch_id === filterBatchId.value)
+})
+
+// 监听批次选择变化，清空人员过滤
+watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
+  if (newBatchId !== oldBatchId) {
+    filterPersonId.value = undefined
+    resetPagination()
+  }
+})
 const dateRange = ref<[string, string] | null>(null)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
 
 // 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
+const { currentPage, pageSize, total, handleSizeChange, handleCurrentChange, resetPagination } = usePagination()
 const pageSizes = [10, 20, 50, 100]
 
 const form = reactive({
@@ -359,26 +399,7 @@ watch(() => form.batch_id, (newBatchId, oldBatchId) => {
   }
 })
 
-// 根据选择的批次过滤人员（过滤区域）
-const filteredPersonsForFilter = computed(() => {
-  if (!filterBatchId.value) {
-    return dataStore.persons
-  }
-  return dataStore.persons.filter(person => person.batch_id === filterBatchId.value)
-})
 
-// 监听过滤批次选择变化，清空人员过滤
-watch(() => filterBatchId.value, (newBatchId, oldBatchId) => {
-  if (newBatchId !== oldBatchId && newBatchId) {
-    // 如果当前选择的人员不属于新批次，则清空人员过滤
-    if (filterPersonId.value) {
-      const selectedPerson = dataStore.persons.find(p => p.person_id === filterPersonId.value)
-      if (!selectedPerson || selectedPerson.batch_id !== newBatchId) {
-        filterPersonId.value = undefined
-      }
-    }
-  }
-})
 
 // 过滤后的数据列表
 const filteredData = computed(() => {
@@ -412,8 +433,10 @@ const paginatedData = computed(() => {
   return filteredData.value.slice(start, end)
 })
 
-// 总数据量
-const total = computed(() => filteredData.value.length)
+// 更新总数据量
+watch(() => filteredData.value.length, (newTotal) => {
+  total.value = newTotal
+}, { immediate: true })
 
 // 图表配置
 const chartOption = computed(() => {
@@ -555,32 +578,9 @@ const getGlucoseLevel = (value: number) => {
   }
 }
 
-// 获取批次号
-const getBatchNumber = (batchId: number): string => {
-  const batch = dataStore.batches.find(b => b.batch_id === batchId)
-  return batch?.batch_number || '未知批次'
-}
 
-// 获取人员姓名
-const getPersonName = (personId: number): string => {
-  const person = dataStore.persons.find(p => p.person_id === personId)
-  return person ? `${person.person_name} (ID: ${person.person_id})` : '未知人员'
-}
 
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
 
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页
-const resetPagination = () => {
-  currentPage.value = 1
-}
 
 // 筛选处理
 const handleFilter = () => {
@@ -641,24 +641,7 @@ const handleExport = () => {
       '血糖值': item.blood_glucose_value
     }))
 
-    // 创建工作簿和工作表
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    ws['!cols'] = [
-      { wch: 20 }, // 时间
-      { wch: 15 }  // 血糖值
-    ]
-    
-    // 添加工作表到工作簿
-    XLSX.utils.book_append_sheet(wb, ws, '血糖数据')
-    
     // 生成文件名
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-    let filename = `指尖血数据导出_${timestamp}.xlsx`
-    
-    // 根据筛选条件调整文件名
     const filters = []
     if (filterBatchId.value) {
       const batch = dataStore.batches.find(b => b.batch_id === filterBatchId.value)
@@ -672,12 +655,12 @@ const handleExport = () => {
       filters.push(`${dateRange.value[0].slice(0, 10)}至${dateRange.value[1].slice(0, 10)}`)
     }
     
-    if (filters.length > 0) {
-      filename = `指尖血数据导出_${filters.join('_')}_${timestamp}.xlsx`
-    }
+    const filename = filters.length > 0 
+      ? `指尖血数据导出_${filters.join('_')}`
+      : '指尖血数据导出'
     
-    // 导出文件
-    XLSX.writeFile(wb, filename)
+    // 使用工具函数导出
+    exportToExcel(exportData, filename, '血糖数据')
     
     ElMessage.success('导出成功')
   } catch (error) {

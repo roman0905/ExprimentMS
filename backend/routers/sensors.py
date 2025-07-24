@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
-from models import Sensor, Batch, Person
+from models import Sensor, Batch, Person, User
 from schemas import SensorCreate, SensorUpdate, SensorResponse, MessageResponse
+from routers.auth import get_current_user, check_module_permission
+from models import ModuleEnum
 
 router = APIRouter(prefix="/api/sensors", tags=["传感器管理"])
 
@@ -13,7 +15,8 @@ def get_sensors(
     limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
     batch_id: Optional[int] = Query(None, description="按批次筛选"),
     person_id: Optional[int] = Query(None, description="按人员筛选"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.SENSOR_DATA, "read"))
 ):
     """获取传感器列表"""
     query = db.query(Sensor).join(Batch).join(Person)
@@ -44,7 +47,11 @@ def get_sensors(
     return result
 
 @router.post("/", response_model=SensorResponse)
-def create_sensor(sensor: SensorCreate, db: Session = Depends(get_db)):
+def create_sensor(
+    sensor: SensorCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.SENSOR_DATA, "write"))
+):
     """新增传感器记录"""
     # 验证批次和人员是否存在
     batch = db.query(Batch).filter(Batch.batch_id == sensor.batch_id).first()
@@ -74,7 +81,11 @@ def create_sensor(sensor: SensorCreate, db: Session = Depends(get_db)):
     return result
 
 @router.get("/{sensor_id}", response_model=SensorResponse)
-def get_sensor(sensor_id: int, db: Session = Depends(get_db)):
+def get_sensor(
+    sensor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.SENSOR_DATA, "read"))
+):
     """获取单个传感器详情"""
     sensor = db.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
     if not sensor:
@@ -94,7 +105,12 @@ def get_sensor(sensor_id: int, db: Session = Depends(get_db)):
     return result
 
 @router.put("/{sensor_id}", response_model=SensorResponse)
-def update_sensor(sensor_id: int, sensor: SensorUpdate, db: Session = Depends(get_db)):
+def update_sensor(
+    sensor_id: int,
+    sensor: SensorUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.SENSOR_DATA, "write"))
+):
     """更新传感器信息"""
     db_sensor = db.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
     if not db_sensor:
@@ -129,7 +145,11 @@ def update_sensor(sensor_id: int, sensor: SensorUpdate, db: Session = Depends(ge
     return result
 
 @router.delete("/{sensor_id}", response_model=MessageResponse)
-def delete_sensor(sensor_id: int, db: Session = Depends(get_db)):
+def delete_sensor(
+    sensor_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.SENSOR_DATA, "delete"))
+):
     """删除传感器记录"""
     db_sensor = db.query(Sensor).filter(Sensor.sensor_id == sensor_id).first()
     if not db_sensor:

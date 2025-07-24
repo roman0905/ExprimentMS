@@ -1,109 +1,96 @@
 # 实验数据管理系统后端 API
 
-基于 FastAPI 构建的实验数据管理系统后端服务，提供完整的 RESTful API 接口。
+## 系统概述
+
+本系统是基于 FastAPI + SQLAlchemy + MySQL 构建的实验数据管理系统后端，提供完整的 RESTful API 接口，支持实验批次、人员、数据等全生命周期管理。
 
 ## 技术栈
 
-- **Web 框架**: FastAPI 0.104.1
-- **数据库 ORM**: SQLAlchemy 2.0.23
+- **框架**: FastAPI 0.104+
 - **数据库**: MySQL 8.0+
+- **ORM**: SQLAlchemy 2.0+
 - **认证**: JWT (JSON Web Tokens)
-- **文档**: 自动生成的 Swagger UI
+- **数据验证**: Pydantic
+- **文档**: 自动生成 Swagger UI
 
-## 功能模块
+## 核心功能模块
 
-### 1. 认证管理 (`/api/auth`)
-- 用户登录/登出
-- JWT 令牌验证
-- 用户信息获取
+### 1. 用户认证与权限管理 (`/api/auth`)
+- **用户注册登录**: 支持用户注册、登录和JWT认证
+- **权限控制**: 基于角色和模块的细粒度权限管理
+- **用户管理**: 管理员可进行用户创建、编辑、删除和权限分配
+- **密码安全**: 使用bcrypt进行密码哈希加密
 
 ### 2. 批次管理 (`/api/batches`)
-- 批次的增删改查
-- 批次搜索和分页
-- 批次关联数据检查
+- **批次CRUD**: 批次的创建、查询、更新和删除
+- **唯一性验证**: 批次号唯一性检查
+- **关联检查**: 删除前检查是否有关联数据
 
 ### 3. 人员管理 (`/api/persons`)
-- 人员信息的增删改查
-- 人员搜索和分页
-- 人员关联数据检查
+- **人员信息管理**: 受试人员基本信息的完整CRUD操作
+- **搜索功能**: 支持按姓名模糊搜索
+- **批次关联**: 人员与实验批次的关联管理
 
 ### 4. 实验管理 (`/api/experiments`)
-- 实验记录的增删改查
-- 实验数据筛选（按批次、人员）
-- 关联批次和人员信息显示
+- **实验记录**: 实验信息的创建、查询、更新和删除
+- **成员管理**: 实验参与人员的分配和管理
+- **数据筛选**: 支持按批次和人员筛选实验记录
 
-### 5. 竞品数据管理 (`/api/competitor-files`)
-- 文件上传/下载
-- 文件列表查询和筛选
-- 文件删除（包括物理文件）
+### 5. 竞品文件管理 (`/api/competitorFiles`)
+- **文件操作**: 支持文件上传、下载、重命名和删除
+- **存储管理**: 文件物理存储与数据库记录同步
+- **数据导出**: Excel格式的文件列表导出功能
+- **筛选查询**: 按批次、人员和时间范围筛选
 
-### 6. 指尖血数据管理 (`/api/finger-blood-data`)
-- 血糖数据的增删改查
-- 时间范围筛选
-- 数据统计和分析
+### 6. 指尖血数据管理 (`/api/fingerBloodData`)
+- **血糖数据**: 指尖血糖值的录入、查询和管理
+- **时间筛选**: 支持按采集时间范围查询
+- **数据导出**: 血糖数据的Excel导出功能
+- **统计分析**: 血糖数据的基本统计信息
 
 ### 7. 传感器管理 (`/api/sensors`)
-- 传感器记录的增删改查
-- 传感器使用时间管理
-- 设备关联信息
+- **设备管理**: 传感器设备信息的完整管理
+- **使用记录**: 传感器使用时间的记录和追踪
+- **状态监控**: 传感器运行状态的实时监控
 
-## 安装和运行
+### 8. 活动日志 (`/api/activities`)
+- **操作记录**: 用户操作行为的完整记录
+- **审计追踪**: 系统操作的审计日志功能
+- **日志查询**: 支持按用户和时间查询操作记录
 
-### 1. 环境要求
+## 快速开始
+
+### 环境要求
 
 - Python 3.11+
 - MySQL 8.0+
+- pip
 
-### 2. 安装依赖
+### 本地开发
 
-```bash
-cd backend
-pip install -r requirements.txt
-```
+1. **安装依赖**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### 3. 数据库配置
+2. **配置环境变量**
+   
+   创建 `.env` 文件：
+   ```env
+   DATABASE_URL=mysql+pymysql://username:password@localhost:3306/experiment_db
+   SECRET_KEY=your-secret-key-here
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=admin123
+   ```
 
-创建 MySQL 数据库：
+3. **启动服务**
+   ```bash
+   uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-```sql
-CREATE DATABASE experiment_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
+### Docker部署
 
-配置数据库连接（修改 `database.py` 中的 `DATABASE_URL`）：
-
-```python
-DATABASE_URL = "mysql+pymysql://username:password@localhost:3306/experiment_db"
-```
-
-或设置环境变量：
-
-```bash
-export DATABASE_URL="mysql+pymysql://username:password@localhost:3306/experiment_db"
-```
-
-### 4. 初始化数据库
-
-```bash
-python init_db.py
-```
-
-重置数据库（删除所有数据）：
-
-```bash
-python init_db.py --reset
-```
-
-### 5. 启动服务
-
-```bash
-python main.py
-```
-
-或使用 uvicorn：
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
+参考项目根目录的 `Docker部署说明.md` 文件进行容器化部署。
 
 ## API 文档
 
@@ -121,23 +108,17 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
 ```
 backend/
-├── main.py                 # 主应用文件
-├── database.py            # 数据库连接配置
-├── models.py              # 数据库模型
-├── schemas.py             # Pydantic 模式
-├── init_db.py             # 数据库初始化脚本
-├── requirements.txt       # 依赖包列表
-├── routers/               # API 路由
-│   ├── __init__.py
-│   ├── auth.py           # 认证路由
-│   ├── batches.py        # 批次管理路由
-│   ├── persons.py        # 人员管理路由
-│   ├── experiments.py    # 实验管理路由
-│   ├── competitor_files.py # 竞品数据路由
-│   ├── finger_blood_data.py # 指尖血数据路由
-│   └── sensors.py        # 传感器管理路由
-└── uploads/              # 文件上传目录
-    └── competitor_files/ # 竞品文件存储
+├── app/
+│   ├── main.py              # FastAPI 应用入口
+│   ├── database.py          # 数据库连接配置
+│   ├── models/              # SQLAlchemy 数据模型
+│   ├── schemas/             # Pydantic 数据验证模式
+│   ├── routers/             # API 路由模块
+│   ├── core/                # 核心功能（配置、安全、依赖）
+│   └── utils/               # 工具函数
+├── uploads/                 # 文件上传存储目录
+├── requirements.txt         # Python 依赖包
+└── .env                     # 环境变量配置
 ```
 
 ## API 使用示例
@@ -173,45 +154,37 @@ curl -X POST "http://localhost:8000/api/batches/" \
 ### 4. 上传竞品文件
 
 ```bash
-curl -X POST "http://localhost:8000/api/competitor-files/upload" \
+curl -X POST "http://localhost:8000/api/competitorFiles/upload" \
      -H "Authorization: Bearer YOUR_TOKEN" \
      -F "batch_id=1" \
      -F "person_id=1" \
      -F "file=@/path/to/your/file.pdf"
 ```
 
-## 开发说明
+## 开发规范
 
-### 1. 添加新的 API 端点
+### API设计原则
+- 遵循 RESTful API 设计规范
+- 使用统一的响应格式和错误处理
+- 实现完整的CRUD操作和数据验证
+- 提供详细的API文档和示例
 
-1. 在相应的路由文件中添加新的端点函数
-2. 定义相应的 Pydantic 模式（如果需要）
-3. 在 `main.py` 中注册路由（如果是新的路由文件）
-
-### 2. 数据库模型修改
-
-1. 修改 `models.py` 中的模型定义
-2. 运行数据库迁移或重新初始化数据库
-3. 更新相应的 Pydantic 模式
-
-### 3. 认证和权限
-
-当前实现了简单的 JWT 认证，可以根据需要扩展：
-
-- 添加角色权限控制
-- 实现用户注册功能
-- 添加密码重置功能
+### 安全措施
+- JWT Token 认证机制
+- 密码bcrypt哈希加密
+- 基于角色的权限控制
+- SQL注入防护和输入验证
 
 ## 部署说明
 
-### 1. 生产环境配置
+### 生产环境配置
 
 - 修改 `SECRET_KEY` 为安全的随机字符串
 - 设置合适的数据库连接池参数
 - 配置日志记录
 - 使用 HTTPS
 
-### 2. Docker 部署
+### Docker 部署
 
 可以创建 Dockerfile 进行容器化部署：
 
@@ -230,26 +203,6 @@ EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-## 故障排除
-
-### 1. 数据库连接问题
-
-- 检查 MySQL 服务是否运行
-- 验证数据库连接字符串
-- 确认数据库用户权限
-
-### 2. 文件上传问题
-
-- 检查 `uploads` 目录权限
-- 确认磁盘空间充足
-- 验证文件大小限制
-
-### 3. 认证问题
-
-- 检查 JWT 令牌是否过期
-- 验证 SECRET_KEY 配置
-- 确认请求头格式正确
-
 ## 许可证
 
-本项目仅供学习和研究使用。
+MIT License

@@ -160,10 +160,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Search, Plus, Download } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import { usePagination } from '../composables/usePagination'
+import { useSearch } from '../composables/useFilter'
+import { exportToExcel } from '../utils/excel'
 import { useDataStore, type Batch } from '../stores/data'
 import { ApiService } from '../services/api'
 import { useAuthStore } from '../stores/auth'
@@ -186,15 +188,10 @@ onMounted(async () => {
 })
 
 const loading = ref(false)
-const searchText = ref('')
+const { searchKeyword: searchText } = useSearch()
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
-
-// 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
-const pageSizes = [10, 20, 50, 100]
 
 const form = reactive({
   batch_id: 0,
@@ -242,30 +239,28 @@ const filteredBatches = computed(() => {
   return result.sort((a, b) => b.batch_id - a.batch_id)
 })
 
-// 当前页数据
+// 分页逻辑
+const {
+  currentPage,
+  pageSize,
+  pageSizes,
+  total,
+  handleSizeChange,
+  handleCurrentChange,
+  resetPagination
+} = usePagination()
+
+// 分页数据计算
 const paginatedBatches = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
   return filteredBatches.value.slice(start, end)
 })
 
-// 总数据量
-const total = computed(() => filteredBatches.value.length)
-
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
-
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页
-const resetPagination = () => {
-  currentPage.value = 1
-}
+// 监听过滤结果变化，更新总数
+watch(filteredBatches, (newVal) => {
+  total.value = newVal.length
+}, { immediate: true })
 
 // 搜索处理
 const handleSearch = () => {
@@ -285,33 +280,15 @@ const handleExport = () => {
       '状态': getBatchStatus(batch).label
     }))
     
-    // 创建工作簿
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    const colWidths = [
-      { wch: 10 }, // 批次ID
-      { wch: 20 }, // 批次号
-      { wch: 20 }, // 开始时间
-      { wch: 20 }, // 结束时间
-      { wch: 10 }  // 状态
-    ]
-    ws['!cols'] = colWidths
-    
-    // 添加工作表
-    XLSX.utils.book_append_sheet(wb, ws, '批次数据')
-    
-    // 生成文件名
-    const fileName = `批次数据_${new Date().toISOString().slice(0, 10)}.xlsx`
-    
-    // 导出文件
-    XLSX.writeFile(wb, fileName)
-    
-    ElMessage.success('导出成功')
+    const success = exportToExcel(exportData, '批次数据导出', '批次数据')
+    if (success) {
+      ElMessage.success('导出成功')
+    } else {
+      ElMessage.error('导出失败')
+    }
   } catch (error) {
     console.error('导出失败:', error)
-    ElMessage.error('导出失败，请重试')
+    ElMessage.error('导出失败')
   }
 }
 

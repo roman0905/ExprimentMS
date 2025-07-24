@@ -2,8 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database import get_db
-from models import Batch
+from models import Batch, User
 from schemas import BatchCreate, BatchUpdate, BatchResponse, MessageResponse
+from routers.auth import get_current_user, check_module_permission
+from models import ModuleEnum
 
 router = APIRouter(prefix="/api/batches", tags=["批次管理"])
 
@@ -12,7 +14,8 @@ def get_batches(
     skip: int = Query(0, ge=0, description="跳过的记录数"),
     limit: int = Query(100, ge=1, le=1000, description="返回的记录数"),
     search: Optional[str] = Query(None, description="按批次号搜索"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.BATCH_MANAGEMENT, "read"))
 ):
     """获取批次列表"""
     query = db.query(Batch)
@@ -24,7 +27,11 @@ def get_batches(
     return batches
 
 @router.post("/", response_model=BatchResponse)
-def create_batch(batch: BatchCreate, db: Session = Depends(get_db)):
+def create_batch(
+    batch: BatchCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.BATCH_MANAGEMENT, "write"))
+):
     """创建新批次"""
     # 检查批次号是否已存在
     existing_batch = db.query(Batch).filter(Batch.batch_number == batch.batch_number).first()
@@ -38,7 +45,11 @@ def create_batch(batch: BatchCreate, db: Session = Depends(get_db)):
     return db_batch
 
 @router.get("/{batch_id}", response_model=BatchResponse)
-def get_batch(batch_id: int, db: Session = Depends(get_db)):
+def get_batch(
+    batch_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.BATCH_MANAGEMENT, "read"))
+):
     """获取单个批次详情"""
     batch = db.query(Batch).filter(Batch.batch_id == batch_id).first()
     if not batch:
@@ -46,7 +57,12 @@ def get_batch(batch_id: int, db: Session = Depends(get_db)):
     return batch
 
 @router.put("/{batch_id}", response_model=BatchResponse)
-def update_batch(batch_id: int, batch: BatchUpdate, db: Session = Depends(get_db)):
+def update_batch(
+    batch_id: int, 
+    batch: BatchUpdate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.BATCH_MANAGEMENT, "write"))
+):
     """更新批次信息"""
     db_batch = db.query(Batch).filter(Batch.batch_id == batch_id).first()
     if not db_batch:
@@ -69,7 +85,11 @@ def update_batch(batch_id: int, batch: BatchUpdate, db: Session = Depends(get_db
     return db_batch
 
 @router.delete("/{batch_id}", response_model=MessageResponse)
-def delete_batch(batch_id: int, db: Session = Depends(get_db)):
+def delete_batch(
+    batch_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(check_module_permission(ModuleEnum.BATCH_MANAGEMENT, "delete"))
+):
     """删除批次"""
     db_batch = db.query(Batch).filter(Batch.batch_id == batch_id).first()
     if not db_batch:

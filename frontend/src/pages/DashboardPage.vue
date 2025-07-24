@@ -201,7 +201,9 @@ const getActivityType = (activityType: string) => {
 // 定时刷新活动数据
 let refreshInterval: number | null = null
 
-onMounted(() => {
+onMounted(async () => {
+  // 初始化所有数据
+  await dataStore.initializeData()
   fetchRecentActivities()
   // 每30秒刷新一次活动数据
   refreshInterval = setInterval(fetchRecentActivities, 30000)

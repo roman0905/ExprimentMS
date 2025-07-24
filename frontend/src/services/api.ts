@@ -168,11 +168,11 @@ export class ApiService {
 
   // 竞品文件管理
   static async getCompetitorFiles(): Promise<CompetitorFile[]> {
-    return api.get('/api/competitor-files/')
+    return api.get('/api/competitorFiles/')
   }
 
   static async uploadCompetitorFile(formData: FormData): Promise<CompetitorFile> {
-    return api.post('/api/competitor-files/upload', formData, {
+    return api.post('/api/competitorFiles/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -180,35 +180,35 @@ export class ApiService {
   }
 
   static async downloadCompetitorFile(id: number): Promise<Blob> {
-    const response = await api.get(`/api/competitor-files/download/${id}`, {
+    const response = await api.get(`/api/competitorFiles/download/${id}`, {
       responseType: 'blob'
     })
     return response.data
   }
 
   static async deleteCompetitorFile(id: number): Promise<void> {
-    return api.delete(`/api/competitor-files/${id}`)
+    return api.delete(`/api/competitorFiles/${id}`)
   }
 
   static async renameCompetitorFile(id: number, newFileName: string): Promise<CompetitorFile> {
-    return api.put(`/api/competitor-files/${id}/rename`, { new_file_name: newFileName })
+    return api.put(`/api/competitorFiles/${id}/rename`, { new_file_name: newFileName })
   }
 
   // 指尖血数据管理
-  static async getFingerBloodData(): Promise<FingerBloodData[]> {
-    return api.get('/api/finger-blood-data/')
+static async getFingerBloodData(): Promise<FingerBloodData[]> {
+    return api.get('/api/fingerBloodData/')
   }
 
-  static async createFingerBloodData(data: Omit<FingerBloodData, 'finger_blood_file_id'>): Promise<FingerBloodData> {
-    return api.post('/api/finger-blood-data/', data)
+static async createFingerBloodData(data: Omit<FingerBloodData, 'finger_blood_file_id'>): Promise<FingerBloodData> {
+    return api.post('/api/fingerBloodData/', data)
   }
 
-  static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): Promise<FingerBloodData> {
-    return api.put(`/api/finger-blood-data/${id}`, data)
+static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): Promise<FingerBloodData> {
+    return api.put(`/api/fingerBloodData/${id}`, data)
   }
 
   static async deleteFingerBloodData(id: number): Promise<void> {
-    return api.delete(`/api/finger-blood-data/${id}`)
+    return api.delete(`/api/fingerBloodData/${id}`)
   }
 
   static async exportFingerBloodData(params?: {
@@ -223,7 +223,7 @@ export class ApiService {
     if (params?.start_time) searchParams.append('start_time', params.start_time)
     if (params?.end_time) searchParams.append('end_time', params.end_time)
     
-    const response = await api.get(`/api/finger-blood-data/export/excel?${searchParams.toString()}`, {
+    const response = await api.get(`/api/fingerBloodData/export/excel?${searchParams.toString()}`, {
       responseType: 'blob'
     })
     return response.data
@@ -261,7 +261,7 @@ export class ApiService {
     if (batchId) params.append('batch_id', batchId.toString())
     if (personId) params.append('person_id', personId.toString())
     
-    const response = await api.get(`/api/competitor-files/export?${params.toString()}`, {
+    const response = await api.get(`/api/competitorFiles/export?${params.toString()}`, {
       responseType: 'blob'
     })
     return response.data

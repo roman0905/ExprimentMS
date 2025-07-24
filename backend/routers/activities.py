@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from database import get_db
 from models import Activity, User
@@ -14,7 +14,8 @@ router = APIRouter(prefix="/api/activities", tags=["activities"])
 def get_activities(
     limit: int = 50,
     skip: int = 0,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     获取最近活动列表
@@ -45,7 +46,8 @@ def get_activities(
 @router.post("/", response_model=ActivityResponse)
 def create_activity(
     activity: ActivityCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     创建新的活动记录

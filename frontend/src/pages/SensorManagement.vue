@@ -28,7 +28,7 @@
           @change="handleFilter"
         >
           <el-option
-            v-for="batch in batches"
+            v-for="batch in availableBatchesForFilter"
             :key="batch.batch_id"
             :label="batch.batch_number"
             :value="batch.batch_id.toString()"
@@ -319,10 +319,13 @@ import {
   CircleClose,
   Clock
 } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
 import { useDataStore, type Sensor, type Person, type Batch } from '../stores/data'
 import { ApiService } from '../services/api'
 import { useAuthStore } from '../stores/auth'
+import { usePagination } from '@/composables/usePagination'
+
+import { getBatchNumber, getPersonName, formatDateTime } from '@/utils/formatters'
+import { exportToExcel } from '@/utils/excel'
 
 const dataStore = useDataStore()
 const authStore = useAuthStore()
@@ -330,6 +333,18 @@ const authStore = useAuthStore()
 // 人员和批次数据
 const persons = ref<Person[]>([])
 const batches = ref<Batch[]>([])
+
+// 根据传感器数据中实际存在的批次进行筛选
+const availableBatchesForFilter = computed(() => {
+  const batchIds = [...new Set(dataStore.sensors.map(sensor => sensor.batch_id))]
+  return batches.value.filter(batch => batchIds.includes(batch.batch_id))
+})
+
+// 根据传感器数据中实际存在的人员进行筛选
+const availablePersonsForFilter = computed(() => {
+  const personIds = [...new Set(dataStore.sensors.map(sensor => sensor.person_id))]
+  return persons.value.filter(person => personIds.includes(person.person_id))
+})
 
 // 组件挂载时获取最新数据
 onMounted(async () => {
@@ -362,9 +377,7 @@ const formRef = ref<FormInstance>()
 const currentSensor = ref<Sensor | null>(null)
 
 // 分页相关
-const currentPage = ref(1)
-const pageSize = ref(10)
-const pageSizes = [10, 20, 50, 100]
+const { currentPage, pageSize, pageSizes, handleSizeChange, handleCurrentChange, resetPagination } = usePagination()
 
 const form = reactive({
   sensor_id: 0,
@@ -501,45 +514,9 @@ const finishedSensors = computed(() => {
   }).length
 })
 
-// 格式化日期时间
-const formatDateTime = (dateTime: string) => {
-  if (!dateTime) return ''
-  return new Date(dateTime).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
 
-// 获取人员姓名
-const getPersonName = (personId: number) => {
-  const person = persons.value.find(p => p.person_id === personId)
-  return person ? `${person.person_name} (ID: ${person.person_id})` : `ID: ${personId}`
-}
 
-// 获取批次号
-const getBatchNumber = (batchId: number) => {
-  const batch = batches.value.find(b => b.batch_id === batchId)
-  return batch ? batch.batch_number : `ID: ${batchId}`
-}
 
-// 分页事件处理
-const handleSizeChange = (val: number) => {
-  pageSize.value = val
-  currentPage.value = 1
-}
-
-const handleCurrentChange = (val: number) => {
-  currentPage.value = val
-}
-
-// 重置分页到第一页（搜索或筛选时使用）
-const resetPagination = () => {
-  currentPage.value = 1
-}
 
 // 搜索处理
 const handleSearch = () => {
@@ -567,31 +544,33 @@ const handleExport = () => {
       '状态': getSensorStatus(sensor).label
     }))
     
-    // 创建工作簿
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(exportData)
-    
-    // 设置列宽
-    const colWidths = [
-      { wch: 12 }, // 传感器ID
-      { wch: 20 }, // 传感器名称
-      { wch: 20 }, // 关联人员
-      { wch: 15 }, // 关联批次
-      { wch: 20 }, // 开始时间
-      { wch: 20 }, // 结束时间
-      { wch: 10 }  // 状态
-    ]
-    ws['!cols'] = colWidths
-    
-    XLSX.utils.book_append_sheet(wb, ws, '传感器数据')
-    
     // 生成文件名
-    const now = new Date()
-    const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
-    const filename = `传感器数据_${timestamp}.xlsx`
+    let filename = '传感器数据'
+    
+    // 如果有筛选条件，添加到文件名中
+    if (filterBatch.value || filterPerson.value) {
+      const filters = []
+      if (filterBatch.value) {
+        const batchNumber = getBatchNumber(parseInt(filterBatch.value))
+        filters.push(`批次${batchNumber}`)
+      }
+      if (filterPerson.value) {
+        const personName = getPersonName(parseInt(filterPerson.value)).split(' ')[0]
+        filters.push(`人员${personName}`)
+      }
+      filename = `传感器数据_${filters.join('_')}`
+    }
     
     // 导出文件
-    XLSX.writeFile(wb, filename)
+    exportToExcel(exportData, filename, {
+      '传感器ID': 12,
+      '传感器名称': 20,
+      '关联人员': 20,
+      '关联批次': 15,
+      '开始时间': 20,
+      '结束时间': 20,
+      '状态': 10
+    })
     
     ElMessage.success('导出成功')
   } catch (error) {
@@ -696,9 +675,9 @@ const resetForm = () => {
 // 根据选择的批次过滤人员（过滤区域）
 const filteredPersonsForFilter = computed(() => {
   if (!filterBatch.value) {
-    return persons.value
+    return availablePersonsForFilter.value
   }
-  return persons.value.filter(person => person.batch_id.toString() === filterBatch.value)
+  return availablePersonsForFilter.value.filter(person => person.batch_id.toString() === filterBatch.value)
 })
 
 // 监听过滤批次选择变化，清空人员过滤
@@ -706,7 +685,7 @@ watch(() => filterBatch.value, (newBatchId, oldBatchId) => {
   if (newBatchId !== oldBatchId && newBatchId) {
     // 如果当前选择的人员不属于新批次，则清空人员过滤
     if (filterPerson.value) {
-      const selectedPerson = persons.value.find(p => p.person_id.toString() === filterPerson.value)
+      const selectedPerson = availablePersonsForFilter.value.find(p => p.person_id.toString() === filterPerson.value)
       if (!selectedPerson || selectedPerson.batch_id.toString() !== newBatchId) {
         filterPerson.value = ''
       }

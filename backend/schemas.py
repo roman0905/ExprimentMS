@@ -19,7 +19,6 @@ class ModuleEnum(str, Enum):
     COMPETITOR_DATA = "competitor_data"
     FINGER_BLOOD_DATA = "finger_blood_data"
     SENSOR_DATA = "sensor_data"
-    USER_MANAGEMENT = "user_management"
 
 # 批次相关模式
 class BatchBase(BaseModel):
@@ -76,10 +75,12 @@ class ExperimentBase(BaseModel):
     experiment_content: Optional[str] = None
 
 class ExperimentCreate(ExperimentBase):
-    member_ids: List[int] = []  # 实验成员ID列表
+    member_ids: List[int] = []
 
-class ExperimentUpdate(ExperimentBase):
-    member_ids: Optional[List[int]] = None  # 实验成员ID列表
+class ExperimentUpdate(BaseModel):
+    batch_id: Optional[int] = None
+    experiment_content: Optional[str] = None
+    member_ids: Optional[List[int]] = None
 
 class ExperimentResponse(ExperimentBase):
     experiment_id: int
