@@ -105,6 +105,7 @@ class CompetitorFileResponse(CompetitorFileBase):
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
     file_size: Optional[int] = None  # 文件大小（字节）
+    filename: Optional[str] = None  # 从文件路径提取的文件名
     
     class Config:
         from_attributes = True

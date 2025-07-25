@@ -57,9 +57,10 @@ def get_competitor_files(
             "person_id": file.person_id,
             "batch_id": file.batch_id,
             "file_path": file.file_path,
-            "person_name": file.person.person_name if file.person else None,
+            "person_name": file.person.name if file.person else None,
             "batch_number": file.batch.batch_number if file.batch else None,
-            "file_size": file_size
+            "file_size": file_size,
+            "filename": os.path.basename(file.file_path)
         }
         result.append(CompetitorFileResponse(**file_dict))
     
@@ -86,8 +87,8 @@ async def upload_competitor_file(
     # 生成唯一文件名
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{timestamp}_{file.filename}"
-    file_path = os.path.join(UPLOAD_DIR, unique_filename)
+    filename = f"{timestamp}_{file.filename}"
+    file_path = os.path.join(UPLOAD_DIR, filename)
     
     # 保存文件
     try:
@@ -96,7 +97,7 @@ async def upload_competitor_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"文件保存失败: {str(e)}")
     
-    # 保存文件信息到数据库
+    # 创建数据库记录
     db_file = CompetitorFile(
         person_id=person_id,
         batch_id=batch_id,
@@ -122,7 +123,8 @@ async def upload_competitor_file(
         file_path=db_file.file_path,
         person_name=person.person_name,
         batch_number=batch.batch_number,
-        file_size=file_size
+        file_size=file_size,
+        filename=os.path.basename(db_file.file_path)
     )
     
     return result
@@ -141,7 +143,7 @@ def download_competitor_file(
     if not os.path.exists(file_record.file_path):
         raise HTTPException(status_code=404, detail="文件已被删除或移动")
     
-    # 从文件路径中提取文件名
+    # 从文件路径提取文件名
     filename = os.path.basename(file_record.file_path)
     
     return FileResponse(
@@ -213,7 +215,8 @@ def rename_competitor_file(
         file_path=file_record.file_path,
         person_name=person.person_name if person else None,
         batch_number=batch.batch_number if batch else None,
-        file_size=file_size
+        file_size=file_size,
+        filename=os.path.basename(file_record.file_path)
     )
     
     return result

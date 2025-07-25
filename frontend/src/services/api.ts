@@ -86,6 +86,7 @@ export interface CompetitorFile {
   person_name?: string
   batch_number?: string
   file_size?: number  // 文件大小（字节）
+  filename?: string   // 从文件路径提取的文件名
 }
 
 export interface FingerBloodData {

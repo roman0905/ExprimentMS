@@ -68,11 +68,11 @@
         v-loading="loading"
       >
         <el-table-column prop="competitor_file_id" label="文件ID" width="100" />
-        <el-table-column prop="file_path" label="文件路径" min-width="200">
+        <el-table-column prop="file_path" label="文件名" min-width="200">
           <template #default="{ row }">
             <div class="file-name">
               <el-icon class="file-icon"><Document /></el-icon>
-              {{ getFileName(row.file_path) }}
+              {{ getFileName(row) }}
             </div>
           </template>
         </el-table-column>
@@ -445,10 +445,11 @@ watch(filteredFiles, (newVal) => {
 
 
 
-// 从文件路径获取文件名
-const getFileName = (filePath: string): string => {
-  if (!filePath) return '未知文件'
-  const parts = filePath.split(/[\/\\]/)
+// 获取文件名（优先使用后端返回的filename字段）
+const getFileName = (row: CompetitorFile): string => {
+  if (row.filename) return row.filename
+  if (!row.file_path) return '未知文件'
+  const parts = row.file_path.split(/[\/\\]/)
   return parts[parts.length - 1] || '未知文件'
 }
 
@@ -530,7 +531,7 @@ const handleDownload = async (row: CompetitorFile) => {
       return
     }
     
-    const fileName = getFileName(row.file_path)
+    const fileName = getFileName(row)
     ElMessage.info(`正在下载文件: ${fileName}`)
     
     // 调用API下载文件
@@ -563,7 +564,7 @@ const handleDownload = async (row: CompetitorFile) => {
 // 重命名文件
 const handleRename = (row: CompetitorFile) => {
   currentFileId.value = row.competitor_file_id
-  currentFileName.value = getFileName(row.file_path)
+  currentFileName.value = getFileName(row)
   renameForm.newFileName = currentFileName.value
   renameDialogVisible.value = true
 }
@@ -602,7 +603,7 @@ const handleSubmitRename = async () => {
 // 删除文件
 const handleDelete = async (row: CompetitorFile) => {
   try {
-    const fileName = getFileName(row.file_path)
+    const fileName = getFileName(row)
     await ElMessageBox.confirm(
       `确定要删除文件 "${fileName}" 吗？删除后无法恢复。`,
       '删除确认',
@@ -632,7 +633,7 @@ const handleExport = () => {
     // 准备导出数据，映射字段名
     const exportData = filteredFiles.value.map(item => ({
       '文件ID': item.competitor_file_id,
-      '文件名': getFileName(item.file_path),
+      '文件名': getFileName(item),
       '关联批次': getBatchNumber(item.batch_id),
       '关联人员': getPersonName(item.person_id),
       '文件大小': getFileSize(item)
