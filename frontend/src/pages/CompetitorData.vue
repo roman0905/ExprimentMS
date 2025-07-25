@@ -51,7 +51,7 @@
         <el-button 
           type="primary" 
           @click="handleUpload"
-          :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
+          :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'write')"
         >
           <el-icon><Upload /></el-icon>
           上传文件
@@ -101,7 +101,7 @@
               type="primary"
               size="small"
               @click="handleDownload(row)"
-              :disabled="!authStore.hasModulePermission('competitor_data', 'read')"
+              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'read')"
             >
               <el-icon><Download /></el-icon>
               下载
@@ -110,7 +110,7 @@
               type="warning"
               size="small"
               @click="handleRename(row)"
-              :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
+              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'write')"
             >
               <el-icon><Edit /></el-icon>
               重命名
@@ -119,7 +119,7 @@
               type="danger"
               size="small"
               @click="handleDelete(row)"
-              :disabled="!authStore.hasModulePermission('competitor_data', 'delete')"
+              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'delete')"
             >
               <el-icon><Delete /></el-icon>
               删除
@@ -524,6 +524,12 @@ const handleSubmitUpload = async () => {
 // 下载文件
 const handleDownload = async (row: CompetitorFile) => {
   try {
+    // 检查用户权限
+    if (!authStore.hasModulePermission('COMPETITOR_DATA', 'read')) {
+      ElMessage.error('无下载权限')
+      return
+    }
+    
     const fileName = getFileName(row.file_path)
     ElMessage.info(`正在下载文件: ${fileName}`)
     
@@ -545,7 +551,12 @@ const handleDownload = async (row: CompetitorFile) => {
     ElMessage.success('文件下载完成')
   } catch (error) {
     console.error('文件下载失败:', error)
-    ElMessage.error('文件下载失败，请重试')
+    // 检查是否是权限错误
+    if (error.response && error.response.status === 403) {
+      ElMessage.error('无下载权限')
+    } else {
+      ElMessage.error('文件下载失败，请重试')
+    }
   }
 }
 
