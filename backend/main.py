@@ -8,13 +8,14 @@ import os
 from routers import batches, persons, experiments, competitor_files, finger_blood_data, sensors, auth, activities
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 创建上传目录
+    # 创建上传目录 - 使用绝对路径确保跨平台兼容性
+    base_dir = os.path.dirname(os.path.abspath(__file__))
     upload_dirs = [
-        "uploads/competitor_files",
+        os.path.join(base_dir, "uploads", "competitor_files"),
     ]
     for dir_path in upload_dirs:
         os.makedirs(dir_path, exist_ok=True)
-    print("上传目录创建完成")
+    print(f"上传目录创建完成: {upload_dirs}")
     
     yield
     # 关闭时的清理工作
@@ -37,9 +38,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 静态文件服务（用于文件下载）
-if os.path.exists("uploads"):
-    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# 静态文件服务（用于文件下载）- 使用绝对路径
+base_dir = os.path.dirname(os.path.abspath(__file__))
+uploads_dir = os.path.join(base_dir, "uploads")
+if os.path.exists(uploads_dir):
+    app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
 # 注册路由
 app.include_router(auth.router)

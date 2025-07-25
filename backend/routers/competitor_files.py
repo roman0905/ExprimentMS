@@ -16,8 +16,9 @@ from utils import format_file_size
 
 router = APIRouter(prefix="/api/competitorFiles", tags=["竞品数据管理"])
 
-# 文件上传目录
-UPLOAD_DIR = "uploads/competitor_files"
+# 文件上传目录 - 使用绝对路径确保跨平台兼容性
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UPLOAD_DIR = os.path.join(BASE_DIR, "uploads", "competitor_files")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("/", response_model=List[CompetitorFileResponse])
