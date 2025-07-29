@@ -86,7 +86,7 @@
         <el-header class="header">
           <div class="header-left">
             <el-button
-              type="text"
+              link
               size="large"
               @click="toggleCollapse"
             >

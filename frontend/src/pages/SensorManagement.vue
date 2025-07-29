@@ -166,6 +166,12 @@
             {{ row.end_time ? formatDateTime(row.end_time) : getSensorStatus(row).label }}
           </template>
         </el-table-column>
+        <el-table-column prop="end_reason" label="结束原因" width="150">
+          <template #default="{ row }">
+            <span v-if="row.end_reason" class="end-reason-text">{{ row.end_reason }}</span>
+            <span v-else class="no-data">-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
             <el-tag :type="getSensorStatus(row).type">{{ getSensorStatus(row).label }}</el-tag>
@@ -236,6 +242,7 @@
                 placeholder="请选择人员"
                 style="width: 100%"
                 filterable
+                :disabled="isEdit"
               >
                 <el-option
                   v-for="person in filteredPersonsForSensor"
@@ -244,7 +251,7 @@
                   :value="person.person_id"
                 />
               </el-select>
-              <div class="form-tip">
+              <div class="form-tip" v-if="!isEdit">
                 {{ form.batch_id ? '显示该批次下的人员' : '请先选择批次' }}
               </div>
             </el-form-item>
@@ -259,6 +266,7 @@
                 placeholder="请选择批次"
                 style="width: 100%"
                 filterable
+                :disabled="isEdit"
               >
                 <el-option
                   v-for="batch in batches"
@@ -283,16 +291,30 @@
           </el-col>
         </el-row>
         
-        <el-form-item label="结束时间">
-          <el-date-picker
-            v-model="form.end_time"
-            type="datetime"
-            placeholder="选择结束时间（可选）"
-            style="width: 100%"
-            format="YYYY-MM-DD HH:mm:ss"
-            value-format="YYYY-MM-DD HH:mm:ss"
-          />
-        </el-form-item>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="结束时间">
+              <el-date-picker
+                v-model="form.end_time"
+                type="datetime"
+                placeholder="选择结束时间（可选）"
+                style="width: 100%"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="结束原因">
+              <el-input
+                v-model="form.end_reason"
+                placeholder="请输入结束原因（可选）"
+                maxlength="255"
+                show-word-limit
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </el-form>
       
       <template #footer>
@@ -324,7 +346,7 @@ import { ApiService } from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { usePagination } from '@/composables/usePagination'
 
-import { getBatchNumber, getPersonName, formatDateTime } from '@/utils/formatters'
+import { formatDateTime } from '@/utils/formatters'
 import { exportToExcel } from '@/utils/excel'
 
 const dataStore = useDataStore()
@@ -333,6 +355,17 @@ const authStore = useAuthStore()
 // 人员和批次数据
 const persons = ref<Person[]>([])
 const batches = ref<Batch[]>([])
+
+// 本地格式化函数
+const getPersonName = (personId: number): string => {
+  const person = persons.value.find(p => p.person_id === personId)
+  return person ? `${person.person_name} (ID: ${person.person_id})` : '未知人员'
+}
+
+const getBatchNumber = (batchId: number): string => {
+  const batch = batches.value.find(b => b.batch_id === batchId)
+  return batch?.batch_number || '未知批次'
+}
 
 // 根据传感器数据中实际存在的批次进行筛选
 const availableBatchesForFilter = computed(() => {
@@ -385,26 +418,50 @@ const form = reactive({
   person_id: null,
   batch_id: null,
   start_time: '',
-  end_time: ''
+  end_time: '',
+  end_reason: ''
 })
 
-const rules = {
-  sensor_name: [
-    { required: true, message: '请输入传感器名称', trigger: 'blur' }
-  ],
-  person_id: [
-    { required: true, message: '请选择关联人员', trigger: 'change' }
-  ],
-  batch_id: [
-    { required: true, message: '请选择关联批次', trigger: 'change' }
-  ],
-  start_time: [
-    { required: true, message: '请选择开始时间', trigger: 'change' }
-  ]
-}
+const rules = computed(() => {
+  const baseRules = {
+    sensor_name: [
+      { required: true, message: '请输入传感器名称', trigger: 'blur' }
+    ],
+    start_time: [
+      { required: true, message: '请选择开始时间', trigger: 'change' }
+    ]
+  }
+  
+  // 新建模式下需要验证批次和人员
+  if (!isEdit.value) {
+    return {
+      ...baseRules,
+      person_id: [
+        { required: true, message: '请选择关联人员', trigger: 'change' }
+      ],
+      batch_id: [
+        { required: true, message: '请选择关联批次', trigger: 'change' }
+      ]
+    }
+  }
+  
+  return baseRules
+})
 
 // 根据选择的批次过滤人员（传感器表单）
 const filteredPersonsForSensor = computed(() => {
+  if (isEdit.value) {
+    // 如果当前选中的人员存在，确保它在列表中
+    if (form.person_id) {
+      const currentPerson = persons.value.find(p => p.person_id === form.person_id)
+      if (currentPerson) {
+        // 确保当前人员在列表的第一位，方便识别
+        const otherPersons = persons.value.filter(p => p.person_id !== form.person_id)
+        return [currentPerson, ...otherPersons]
+      }
+    }
+    return persons.value
+  }
   if (!form.batch_id) {
     return []
   }
@@ -413,7 +470,7 @@ const filteredPersonsForSensor = computed(() => {
 
 // 监听批次选择变化，清空人员选择（传感器表单）
 watch(() => form.batch_id, (newBatchId, oldBatchId) => {
-  if (newBatchId !== oldBatchId) {
+  if (newBatchId !== oldBatchId && !isEdit.value) {
     form.person_id = null
   }
 })
@@ -541,6 +598,7 @@ const handleExport = () => {
       '关联批次': getBatchNumber(sensor.batch_id),
       '开始时间': formatDateTime(sensor.start_time),
       '结束时间': formatDateTime(sensor.end_time),
+      '结束原因': sensor.end_reason || '-',
       '状态': getSensorStatus(sensor).label
     }))
     
@@ -569,6 +627,7 @@ const handleExport = () => {
       '关联批次': 15,
       '开始时间': 20,
       '结束时间': 20,
+      '结束原因': 25,
       '状态': 10
     })
     
@@ -590,7 +649,16 @@ const handleAdd = () => {
 const handleEdit = (row: Sensor) => {
   isEdit.value = true
   dialogVisible.value = true
-  Object.assign(form, row)
+  // 确保数据完整复制，包括所有字段
+  Object.assign(form, {
+    sensor_id: row.sensor_id,
+    sensor_name: row.sensor_name,
+    person_id: row.person_id,
+    batch_id: row.batch_id,
+    start_time: row.start_time,
+    end_time: row.end_time || '',
+    end_reason: row.end_reason || ''
+  })
 }
 
 
@@ -632,7 +700,8 @@ const handleSubmit = async () => {
             person_id: form.person_id,
             batch_id: form.batch_id,
             start_time: form.start_time,
-            end_time: form.end_time
+            end_time: form.end_time,
+            end_reason: form.end_reason
           })
           ElMessage.success('更新成功')
         } else {
@@ -642,7 +711,8 @@ const handleSubmit = async () => {
             person_id: form.person_id,
             batch_id: form.batch_id,
             start_time: form.start_time,
-            end_time: form.end_time
+            end_time: form.end_time,
+            end_reason: form.end_reason
           })
           ElMessage.success('添加成功')
         }
@@ -668,7 +738,8 @@ const resetForm = () => {
     person_id: null,
     batch_id: null,
     start_time: '',
-    end_time: ''
+    end_time: '',
+    end_reason: ''
   })
 }
 
@@ -825,6 +896,16 @@ watch(() => filterBatch.value, (newBatchId, oldBatchId) => {
   justify-content: center;
   margin-top: 20px;
   padding: 20px 0;
+}
+
+.end-reason-text {
+  color: #606266;
+  font-size: 13px;
+}
+
+.no-data {
+  color: #C0C4CC;
+  font-style: italic;
 }
 
 .dialog-footer {

@@ -178,7 +178,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import { api } from '@/api'
+import api from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 
 interface User {

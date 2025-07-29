@@ -57,7 +57,8 @@ def get_competitor_files(
             "person_id": file.person_id,
             "batch_id": file.batch_id,
             "file_path": file.file_path,
-            "person_name": file.person.name if file.person else None,
+            "upload_time": file.upload_time,
+            "person_name": file.person.person_name if file.person else None,
             "batch_number": file.batch.batch_number if file.batch else None,
             "file_size": file_size,
             "filename": os.path.basename(file.file_path)
@@ -84,11 +85,16 @@ async def upload_competitor_file(
     if not person:
         raise HTTPException(status_code=400, detail="指定的人员不存在")
     
-    # 生成唯一文件名
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    file_extension = os.path.splitext(file.filename)[1]
-    filename = f"{timestamp}_{file.filename}"
+    # 使用原始文件名，如果重名则覆盖
+    filename = file.filename
     file_path = os.path.join(UPLOAD_DIR, filename)
+    
+    # 检查是否已存在相同的文件记录
+    existing_file = db.query(CompetitorFile).filter(
+        CompetitorFile.file_path == file_path,
+        CompetitorFile.batch_id == batch_id,
+        CompetitorFile.person_id == person_id
+    ).first()
     
     # 保存文件
     try:
@@ -97,16 +103,18 @@ async def upload_competitor_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"文件保存失败: {str(e)}")
     
-    # 创建数据库记录
-    db_file = CompetitorFile(
-        person_id=person_id,
-        batch_id=batch_id,
-        file_path=file_path
-    )
-    
-    db.add(db_file)
-    db.commit()
-    db.refresh(db_file)
+    # 如果存在相同记录，直接返回现有记录；否则创建新记录
+    if existing_file:
+        db_file = existing_file
+    else:
+        db_file = CompetitorFile(
+            person_id=person_id,
+            batch_id=batch_id,
+            file_path=file_path
+        )
+        db.add(db_file)
+        db.commit()
+        db.refresh(db_file)
     
     # 获取上传文件的大小
     file_size = None
@@ -121,6 +129,7 @@ async def upload_competitor_file(
         person_id=db_file.person_id,
         batch_id=db_file.batch_id,
         file_path=db_file.file_path,
+        upload_time=db_file.upload_time,
         person_name=person.person_name,
         batch_number=batch.batch_number,
         file_size=file_size,
@@ -213,6 +222,7 @@ def rename_competitor_file(
         person_id=file_record.person_id,
         batch_id=file_record.batch_id,
         file_path=file_record.file_path,
+        upload_time=file_record.upload_time,
         person_name=person.person_name if person else None,
         batch_number=batch.batch_number if batch else None,
         file_size=file_size,

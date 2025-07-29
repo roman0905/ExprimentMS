@@ -248,13 +248,11 @@ const authStore = useAuthStore()
 onMounted(async () => {
   try {
     loading.value = true
-    // 并行加载所有必要的数据
     const [experimentsData, batchesData, personsData] = await Promise.all([
       ApiService.getExperiments(),
       ApiService.getBatches(),
       ApiService.getPersons()
     ])
-    
     dataStore.experiments = experimentsData
     dataStore.batches = batchesData
     dataStore.persons = personsData

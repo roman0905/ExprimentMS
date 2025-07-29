@@ -2,38 +2,14 @@ import axios from 'axios'
 
 // 创建axios实例
 const api = axios.create({
-  baseURL: 'http://192.168.10.14:8000',
+  baseURL: 'http://localhost:8000',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
-// 请求拦截器
-api.interceptors.request.use(
-  (config) => {
-    // 可以在这里添加认证token
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  },
-  (error) => {
-    return Promise.reject(error)
-  }
-)
-
-// 响应拦截器
-api.interceptors.response.use(
-  (response) => {
-    return response.data
-  },
-  (error) => {
-    console.error('API Error:', error)
-    return Promise.reject(error)
-  }
-)
+// 注意：请求和响应拦截器现在由 auth.ts 中的 setupApiInterceptors 方法统一管理
 
 // 数据类型定义
 export interface Batch {
@@ -83,6 +59,7 @@ export interface CompetitorFile {
   person_id: number
   batch_id: number
   file_path: string
+  upload_time: string
   person_name?: string
   batch_number?: string
   file_size?: number  // 文件大小（字节）
@@ -106,78 +83,140 @@ export interface Sensor {
   batch_id: number
   start_time: string
   end_time?: string
+  end_reason?: string
   person_name?: string
   batch_number?: string
 }
 
 // API服务类
 export class ApiService {
+  // 用户认证管理
+  static async login(data: { username: string; password: string }) {
+    const response = await api.post('/api/auth/login', data)
+    return response.data
+  }
+
+  static async register(data: { username: string; password: string }) {
+    const response = await api.post('/api/auth/register', data)
+    return response.data
+  }
+
+  static async getCurrentUser() {
+    const response = await api.get('/api/auth/me')
+    return response.data
+  }
+
+  static async logout() {
+    const response = await api.post('/api/auth/logout')
+    return response.data
+  }
+
+  static async getUsers() {
+    const response = await api.get('/api/auth/users')
+    return response.data
+  }
+
+  static async createUser(data: any) {
+    const response = await api.post('/api/auth/users', data)
+    return response.data
+  }
+
+  static async updateUser(userId: number, data: any) {
+    const response = await api.put(`/api/auth/users/${userId}`, data)
+    return response.data
+  }
+
+  static async deleteUser(userId: number) {
+    await api.delete(`/api/auth/users/${userId}`)
+  }
+
+  static async getUserPermissions(userId: number) {
+    const response = await api.get(`/api/auth/users/${userId}/permissions`)
+    return response.data
+  }
+
+  static async assignPermissions(data: any) {
+    const response = await api.post('/api/auth/assign-permissions', data)
+    return response.data
+  }
   // 批次管理
   static async getBatches(): Promise<Batch[]> {
-    return api.get('/api/batches/')
+    const response = await api.get('/api/batches/')
+    return response.data
   }
 
   static async createBatch(batch: Omit<Batch, 'batch_id'>): Promise<Batch> {
-    return api.post('/api/batches/', batch)
+    const response = await api.post('/api/batches/', batch)
+    return response.data
   }
 
   static async updateBatch(id: number, batch: Partial<Batch>): Promise<Batch> {
-    return api.put(`/api/batches/${id}`, batch)
+    const response = await api.put(`/api/batches/${id}`, batch)
+    return response.data
   }
 
   static async deleteBatch(id: number): Promise<void> {
-    return api.delete(`/api/batches/${id}`)
+    await api.delete(`/api/batches/${id}`)
   }
 
   // 人员管理
   static async getPersons(): Promise<Person[]> {
-    return api.get('/api/persons/')
+    const response = await api.get('/api/persons/')
+    return response.data
   }
 
   static async createPerson(person: Omit<Person, 'person_id'>): Promise<Person> {
-    return api.post('/api/persons/', person)
+    const response = await api.post('/api/persons/', person)
+    return response.data
   }
 
   static async updatePerson(id: number, person: Partial<Person>): Promise<Person> {
-    return api.put(`/api/persons/${id}`, person)
+    const response = await api.put(`/api/persons/${id}`, person)
+    return response.data
   }
 
   static async deletePerson(id: number): Promise<void> {
-    return api.delete(`/api/persons/${id}`)
+    await api.delete(`/api/persons/${id}`)
   }
 
   static async getBatchesForPerson(): Promise<Batch[]> {
-    return api.get('/api/persons/batches')
+    const response = await api.get('/api/persons/batches')
+    return response.data
   }
 
   // 实验管理
   static async getExperiments(): Promise<Experiment[]> {
-    return api.get('/api/experiments/')
+    const response = await api.get('/api/experiments/')
+    return response.data
   }
 
   static async createExperiment(experiment: Omit<Experiment, 'experiment_id'>): Promise<Experiment> {
-    return api.post('/api/experiments/', experiment)
+    const response = await api.post('/api/experiments/', experiment)
+    return response.data
   }
 
   static async updateExperiment(id: number, experiment: Partial<Experiment>): Promise<Experiment> {
-    return api.put(`/api/experiments/${id}`, experiment)
+    const response = await api.put(`/api/experiments/${id}`, experiment)
+    return response.data
   }
 
   static async deleteExperiment(id: number): Promise<void> {
-    return api.delete(`/api/experiments/${id}`)
+    await api.delete(`/api/experiments/${id}`)
   }
 
   // 竞品文件管理
   static async getCompetitorFiles(): Promise<CompetitorFile[]> {
-    return api.get('/api/competitorFiles/')
+    const response = await api.get('/api/competitorFiles/')
+    return response.data
   }
 
   static async uploadCompetitorFile(formData: FormData): Promise<CompetitorFile> {
-    return api.post('/api/competitorFiles/upload', formData, {
+    const response = await api.post('/api/competitorFiles/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
     })
+    return response.data
   }
 
   static async downloadCompetitorFile(id: number): Promise<Blob> {
@@ -188,28 +227,32 @@ export class ApiService {
   }
 
   static async deleteCompetitorFile(id: number): Promise<void> {
-    return api.delete(`/api/competitorFiles/${id}`)
+    await api.delete(`/api/competitorFiles/${id}`)
   }
 
   static async renameCompetitorFile(id: number, newFileName: string): Promise<CompetitorFile> {
-    return api.put(`/api/competitorFiles/${id}/rename`, { new_file_name: newFileName })
+    const response = await api.put(`/api/competitorFiles/${id}/rename`, { new_file_name: newFileName })
+    return response.data
   }
 
   // 指尖血数据管理
-static async getFingerBloodData(): Promise<FingerBloodData[]> {
-    return api.get('/api/fingerBloodData/')
+  static async getFingerBloodData(): Promise<FingerBloodData[]> {
+    const response = await api.get('/api/fingerBloodData/')
+    return response.data
   }
 
-static async createFingerBloodData(data: Omit<FingerBloodData, 'finger_blood_file_id'>): Promise<FingerBloodData> {
-    return api.post('/api/fingerBloodData/', data)
+  static async createFingerBloodData(data: Omit<FingerBloodData, 'finger_blood_file_id'>): Promise<FingerBloodData> {
+    const response = await api.post('/api/fingerBloodData/', data)
+    return response.data
   }
 
-static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): Promise<FingerBloodData> {
-    return api.put(`/api/fingerBloodData/${id}`, data)
+  static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): Promise<FingerBloodData> {
+    const response = await api.put(`/api/fingerBloodData/${id}`, data)
+    return response.data
   }
 
   static async deleteFingerBloodData(id: number): Promise<void> {
-    return api.delete(`/api/fingerBloodData/${id}`)
+    await api.delete(`/api/fingerBloodData/${id}`)
   }
 
   static async exportFingerBloodData(params?: {
@@ -232,28 +275,33 @@ static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): 
 
   // 传感器管理
   static async getSensors(): Promise<Sensor[]> {
-    return api.get('/api/sensors/')
+    const response = await api.get('/api/sensors/')
+    return response.data
   }
 
   static async createSensor(sensor: Omit<Sensor, 'sensor_id'>): Promise<Sensor> {
-    return api.post('/api/sensors/', sensor)
+    const response = await api.post('/api/sensors/', sensor)
+    return response.data
   }
 
   static async updateSensor(id: number, sensor: Partial<Sensor>): Promise<Sensor> {
-    return api.put(`/api/sensors/${id}`, sensor)
+    const response = await api.put(`/api/sensors/${id}`, sensor)
+    return response.data
   }
 
   static async deleteSensor(id: number): Promise<void> {
-    return api.delete(`/api/sensors/${id}`)
+    await api.delete(`/api/sensors/${id}`)
   }
 
   // 活动记录管理
   static async getActivities(limit: number = 10): Promise<Activity[]> {
-    return api.get(`/api/activities/?limit=${limit}`)
+    const response = await api.get(`/api/activities/?limit=${limit}`)
+    return response.data
   }
 
   static async createActivity(activity: Omit<Activity, 'activity_id' | 'created_time'>): Promise<Activity> {
-    return api.post('/api/activities/', activity)
+    const response = await api.post('/api/activities/', activity)
+    return response.data
   }
 
   // 竞品数据导出
@@ -267,6 +315,20 @@ static async updateFingerBloodData(id: number, data: Partial<FingerBloodData>): 
     })
     return response.data
   }
+}
+
+// 为了向后兼容，导出userApi对象
+export const userApi = {
+  login: (data: { username: string; password: string }) => ApiService.login(data),
+  register: (data: { username: string; password: string }) => ApiService.register(data),
+  getCurrentUser: () => ApiService.getCurrentUser(),
+  logout: () => ApiService.logout(),
+  getUsers: () => ApiService.getUsers(),
+  createUser: (data: any) => ApiService.createUser(data),
+  updateUser: (userId: number, data: any) => ApiService.updateUser(userId, data),
+  deleteUser: (userId: number) => ApiService.deleteUser(userId),
+  getUserPermissions: (userId: number) => ApiService.getUserPermissions(userId),
+  assignPermissions: (data: any) => ApiService.assignPermissions(data)
 }
 
 export default api

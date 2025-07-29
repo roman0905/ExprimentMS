@@ -56,7 +56,7 @@ def create_activity(
         activity_type=activity.activity_type,
         description=activity.description,
         user_id=activity.user_id,
-        createTime=datetime.utcnow()
+        createTime=datetime.now()
     )
     
     db.add(db_activity)
@@ -86,7 +86,7 @@ def log_activity(db: Session, activity_type: str, description: str, user_id: Opt
         activity_type=activity_type,
         description=description,
         user_id=user_id,
-        createTime=datetime.utcnow()
+        createTime=datetime.now()
     )
     db.add(activity)
     db.commit()

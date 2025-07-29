@@ -1,7 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+
+# 基础配置类，统一datetime格式
+class BaseModelWithConfig(BaseModel):
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_encoders={
+            datetime: lambda v: v.strftime('%Y-%m-%d %H:%M:%S') if v else None
+        }
+    )
 
 class GenderEnum(str, Enum):
     Male = "Male"
@@ -21,7 +30,7 @@ class ModuleEnum(str, Enum):
     SENSOR_DATA = "sensor_data"
 
 # 批次相关模式
-class BatchBase(BaseModel):
+class BatchBase(BaseModelWithConfig):
     batch_number: str
     start_time: datetime
     end_time: Optional[datetime] = None
@@ -34,9 +43,6 @@ class BatchUpdate(BatchBase):
 
 class BatchResponse(BatchBase):
     batch_id: int
-    
-    class Config:
-        from_attributes = True
 
 # 人员相关模式
 class PersonBase(BaseModel):
@@ -82,14 +88,13 @@ class ExperimentUpdate(BaseModel):
     experiment_content: Optional[str] = None
     member_ids: Optional[List[int]] = None
 
-class ExperimentResponse(ExperimentBase):
+class ExperimentResponse(BaseModelWithConfig):
     experiment_id: int
+    batch_id: int
+    experiment_content: Optional[str] = None
     created_time: Optional[datetime] = None
     batch_number: Optional[str] = None
     members: List[ExperimentMemberResponse] = []
-    
-    class Config:
-        from_attributes = True
 
 # 竞品文件相关模式
 class CompetitorFileBase(BaseModel):
@@ -100,18 +105,19 @@ class CompetitorFileBase(BaseModel):
 class CompetitorFileCreate(CompetitorFileBase):
     pass
 
-class CompetitorFileResponse(CompetitorFileBase):
+class CompetitorFileResponse(BaseModelWithConfig):
     competitor_file_id: int
+    person_id: int
+    batch_id: int
+    file_path: str
+    upload_time: datetime
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
     file_size: Optional[int] = None  # 文件大小（字节）
     filename: Optional[str] = None  # 从文件路径提取的文件名
-    
-    class Config:
-        from_attributes = True
 
 # 指尖血数据相关模式
-class FingerBloodDataBase(BaseModel):
+class FingerBloodDataBase(BaseModelWithConfig):
     person_id: int
     batch_id: int
     collection_time: datetime
@@ -127,17 +133,15 @@ class FingerBloodDataResponse(FingerBloodDataBase):
     finger_blood_file_id: int
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
 
 # 传感器相关模式
-class SensorBase(BaseModel):
+class SensorBase(BaseModelWithConfig):
     sensor_name: str
     person_id: int
     batch_id: int
     start_time: datetime
     end_time: Optional[datetime] = None
+    end_reason: Optional[str] = None
 
 class SensorCreate(SensorBase):
     pass
@@ -149,9 +153,6 @@ class SensorResponse(SensorBase):
     sensor_id: int
     person_name: Optional[str] = None
     batch_number: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
 
 # 通用响应模式
 class MessageResponse(BaseModel):
@@ -190,24 +191,20 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     role: Optional[RoleEnum] = None
 
-class UserResponse(UserBase):
-    user_id: int
-    createTime: datetime
-    updateTime: datetime
-    permissions: List[UserPermissionResponse] = []
-    
-    class Config:
-        from_attributes = True
-
-class UserListResponse(BaseModel):
+class UserResponse(BaseModelWithConfig):
     user_id: int
     username: str
     role: RoleEnum
     createTime: datetime
     updateTime: datetime
-    
-    class Config:
-        from_attributes = True
+    permissions: List[UserPermissionResponse] = []
+
+class UserListResponse(BaseModelWithConfig):
+    user_id: int
+    username: str
+    role: RoleEnum
+    createTime: datetime
+    updateTime: datetime
 
 # 登录相关模式
 class LoginRequest(BaseModel):

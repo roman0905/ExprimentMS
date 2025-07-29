@@ -199,13 +199,15 @@ const authStore = useAuthStore()
 onMounted(async () => {
   try {
     loading.value = true
-    // 并行获取人员数据和批次数据
     const [personsData, batchesData] = await Promise.all([
       ApiService.getPersons(),
-      ApiService.getBatchesForPerson()
+      ApiService.getBatches()
     ])
     dataStore.persons = personsData
-    batches.value = batchesData
+    dataStore.batches = batchesData
+    
+    // 获取批次数据用于表单选择
+    batches.value = await ApiService.getBatchesForPerson()
   } catch (error) {
     console.error('Failed to load data:', error)
     ElMessage.error('加载数据失败')
@@ -374,13 +376,8 @@ const handleSubmit = async () => {
           ElMessage.success('创建成功')
         }
         
-        // 重新加载人员数据以确保UI刷新
-        const [personsData, batchesData] = await Promise.all([
-          ApiService.getPersons(),
-          ApiService.getBatchesForPerson()
-        ])
-        dataStore.persons = personsData
-        batches.value = batchesData
+        // 更新批次数据
+        batches.value = await ApiService.getBatchesForPerson()
         
         dialogVisible.value = false
         resetForm()

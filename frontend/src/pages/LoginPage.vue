@@ -132,7 +132,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
-import { userApi } from '../api/index'
+import { userApi } from '@/services/api'
 
 const router = useRouter()
 const route = useRoute()

@@ -51,7 +51,7 @@
         <el-button 
           type="primary" 
           @click="handleUpload"
-          :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'write')"
+          :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
         >
           <el-icon><Upload /></el-icon>
           上传文件
@@ -95,13 +95,18 @@
             {{ getFileSize(row) }}
           </template>
         </el-table-column>
+        <el-table-column label="上传时间" width="160">
+          <template #default="{ row }">
+            {{ formatDateTime(row.upload_time) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="{ row }">
             <el-button
               type="primary"
               size="small"
               @click="handleDownload(row)"
-              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'read')"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'read')"
             >
               <el-icon><Download /></el-icon>
               下载
@@ -110,7 +115,7 @@
               type="warning"
               size="small"
               @click="handleRename(row)"
-              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'write')"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'write')"
             >
               <el-icon><Edit /></el-icon>
               重命名
@@ -119,7 +124,7 @@
               type="danger"
               size="small"
               @click="handleDelete(row)"
-              :disabled="!authStore.hasModulePermission('COMPETITOR_DATA', 'delete')"
+              :disabled="!authStore.hasModulePermission('competitor_data', 'delete')"
             >
               <el-icon><Delete /></el-icon>
               删除
@@ -279,7 +284,7 @@ import { useAuthStore } from '../stores/auth'
 import { ApiService } from '../services/api'
 import { usePagination } from '../composables/usePagination'
 
-import { getBatchNumber, getPersonName, formatFileSize } from '../utils/formatters'
+import { getBatchNumber, getPersonName, formatFileSize, formatDateTime } from '../utils/formatters'
 import { exportToExcel } from '../utils/excel'
 
 const dataStore = useDataStore()
@@ -296,7 +301,6 @@ onMounted(async () => {
       ApiService.getPersons()
     ])
     
-    // 更新数据存储
     dataStore.competitorFiles = competitorFilesData
     dataStore.batches = batchesData
     dataStore.persons = personsData
@@ -506,8 +510,18 @@ const handleSubmitUpload = async () => {
         // 调用API上传文件
         const result = await ApiService.uploadCompetitorFile(formData)
         
-        // 更新本地数据
-        dataStore.competitorFiles.push(result)
+        // 更新本地数据 - 检查是否已存在相同记录
+        const existingIndex = dataStore.competitorFiles.findIndex(
+          file => file.competitor_file_id === result.competitor_file_id
+        )
+        
+        if (existingIndex !== -1) {
+          // 如果已存在，更新现有记录
+          dataStore.competitorFiles[existingIndex] = result
+        } else {
+          // 如果不存在，添加新记录
+          dataStore.competitorFiles.push(result)
+        }
         
         ElMessage.success('文件上传成功')
         uploadDialogVisible.value = false
@@ -526,7 +540,7 @@ const handleSubmitUpload = async () => {
 const handleDownload = async (row: CompetitorFile) => {
   try {
     // 检查用户权限
-    if (!authStore.hasModulePermission('COMPETITOR_DATA', 'read')) {
+    if (!authStore.hasModulePermission('competitor_data', 'read')) {
       ElMessage.error('无下载权限')
       return
     }
@@ -636,7 +650,8 @@ const handleExport = () => {
       '文件名': getFileName(item),
       '关联批次': getBatchNumber(item.batch_id),
       '关联人员': getPersonName(item.person_id),
-      '文件大小': getFileSize(item)
+      '文件大小': getFileSize(item),
+      '上传时间': formatDateTime(item.upload_time)
     }))
 
     // 生成文件名
@@ -662,7 +677,8 @@ const handleExport = () => {
       '文件名': 30,
       '关联批次': 20,
       '关联人员': 25,
-      '文件大小': 15
+      '文件大小': 15,
+      '上传时间': 20
     })
     
     ElMessage.success('数据导出成功')

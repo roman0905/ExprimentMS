@@ -2,10 +2,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from datetime import datetime
+import json
 import os
 
 # 导入路由
 from routers import batches, persons, experiments, competitor_files, finger_blood_data, sensors, auth, activities
+
+# datetime格式统一配置已在schemas.py中的BaseModelWithConfig类中设置
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 创建上传目录 - 使用绝对路径确保跨平台兼容性

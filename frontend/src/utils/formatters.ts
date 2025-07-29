@@ -24,17 +24,20 @@ export function getPersonName(personId: number): string {
 
 /**
  * 格式化日期时间
+ * 统一输出格式：YYYY-MM-DD HH:mm:ss（不带T）
  */
 export function formatDateTime(dateTime: string | Date): string {
   if (!dateTime) return ''
-  return new Date(dateTime).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
+  const date = new Date(dateTime)
+  
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 /**

@@ -60,7 +60,7 @@ class Experiment(Base):
     experiment_id = Column(Integer, primary_key=True, index=True, comment="实验唯一标识符")
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False, comment="关联的批次ID")
     experiment_content = Column(Text, nullable=True, comment="实验具体内容描述")
-    created_time = Column(DateTime, nullable=False, default=datetime.utcnow, comment="创建时间")
+    created_time = Column(DateTime, nullable=False, default=datetime.now, comment="创建时间")
     
     # 关系
     batch = relationship("Batch", back_populates="experiments")
@@ -73,6 +73,7 @@ class CompetitorFile(Base):
     person_id = Column(Integer, ForeignKey("persons.person_id"), nullable=False, comment="关联的人员ID")
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False, comment="关联的批次ID")
     file_path = Column(String(512), nullable=False, comment="文件存储路径")
+    upload_time = Column(DateTime, nullable=False, default=datetime.now, comment="文件上传时间")
     
     # 关系
     person = relationship("Person", back_populates="competitor_files")
@@ -100,6 +101,7 @@ class Sensor(Base):
     batch_id = Column(Integer, ForeignKey("batches.batch_id"), nullable=False, comment="关联的批次ID")
     start_time = Column(DateTime, nullable=False, comment="传感器开始使用时间")
     end_time = Column(DateTime, nullable=True, comment="传感器结束使用时间")
+    end_reason = Column(String(255), nullable=True, comment="传感器结束使用原因")
     
     # 关系
     person = relationship("Person", back_populates="sensors")
@@ -112,8 +114,8 @@ class User(Base):
     username = Column(String(50), unique=True, nullable=False, comment="登录用户名")
     password_hash = Column(String(255), nullable=False, comment="哈希加密后的密码")
     role = Column(Enum(RoleEnum), nullable=False, comment="用户角色 (Admin/User)")
-    createTime = Column(DateTime, nullable=False, default=datetime.utcnow, comment="创建时间")
-    updateTime = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow, comment="最后更新时间")
+    createTime = Column(DateTime, nullable=False, default=datetime.now, comment="创建时间")
+    updateTime = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now, comment="最后更新时间")
     
     # 关系
     permissions = relationship("UserPermission", back_populates="user")
@@ -137,7 +139,7 @@ class Activity(Base):
     activity_id = Column(Integer, primary_key=True, index=True, comment="活动唯一标识符")
     activity_type = Column(String(50), nullable=False, comment="活动类型")
     description = Column(Text, nullable=False, comment="活动描述")
-    createTime = Column(DateTime, nullable=False, default=datetime.utcnow, comment="创建时间")
+    createTime = Column(DateTime, nullable=False, default=datetime.now, comment="创建时间")
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=True, comment="操作用户ID")
     
     # 关系

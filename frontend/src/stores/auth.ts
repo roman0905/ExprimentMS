@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/api'
+import api from '@/services/api'
 
 export interface UserPermission {
   permission_id: number

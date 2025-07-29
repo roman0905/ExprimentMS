@@ -39,6 +39,7 @@ def get_sensors(
             "batch_id": sensor.batch_id,
             "start_time": sensor.start_time,
             "end_time": sensor.end_time,
+            "end_reason": sensor.end_reason,
             "person_name": sensor.person.person_name if sensor.person else None,
             "batch_number": sensor.batch.batch_number if sensor.batch else None
         }
@@ -74,6 +75,7 @@ def create_sensor(
         batch_id=db_sensor.batch_id,
         start_time=db_sensor.start_time,
         end_time=db_sensor.end_time,
+        end_reason=db_sensor.end_reason,
         person_name=person.person_name,
         batch_number=batch.batch_number
     )
@@ -98,6 +100,7 @@ def get_sensor(
         batch_id=sensor.batch_id,
         start_time=sensor.start_time,
         end_time=sensor.end_time,
+        end_reason=sensor.end_reason,
         person_name=sensor.person.person_name if sensor.person else None,
         batch_number=sensor.batch.batch_number if sensor.batch else None
     )
@@ -138,6 +141,7 @@ def update_sensor(
         batch_id=db_sensor.batch_id,
         start_time=db_sensor.start_time,
         end_time=db_sensor.end_time,
+        end_reason=db_sensor.end_reason,
         person_name=person.person_name,
         batch_number=batch.batch_number
     )
